@@ -414,7 +414,9 @@ class TypesGenerator
                 mkdir($classDir, 0777, true);
             }
 
-            $path = sprintf('%s%s.php', $classDir, $deScopedClassName);
+            // make sure we use the $class name rather than $className since
+            // $className is not descoped
+            $path = sprintf('%s%s.php', $classDir, $class['name']);
             $generatedFiles[] = $path;
 
             file_put_contents(
