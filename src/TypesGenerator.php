@@ -847,6 +847,8 @@ class TypesGenerator
      */
     private function namespaceToDir(array $config, string $namespace): string
     {
+        //$namespace = trim($namespace, "\\/");
+
         if (null !== ($prefix = $config['namespaces']['prefix'] ?? null) && 0 === strpos($namespace, $prefix)) {
             $namespace = substr($namespace, \strlen($prefix));
         }
