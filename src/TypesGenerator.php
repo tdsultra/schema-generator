@@ -170,10 +170,13 @@ class TypesGenerator
             }
 
             // @Note: make sure we use the descopedClassName here too
-            $class['name'] = $deScopedClassName;
+            $class['name'] = $typeName;
+            $class['descopedName'] = $deScopedClassName;
             $class['label'] = $comment ? $comment->getValue() : '';
             $class['resource'] = $type;
             $class['config'] = $typeConfig;
+
+            print($class['name'] . " :: " . $class['descopedName'] . "\r\n");
 
             $class['isEnum'] = $this->isEnum($type);
             if ($class['isEnum']) {
@@ -416,7 +419,7 @@ class TypesGenerator
 
             // make sure we use the $class name rather than $className since
             // $className is not descoped
-            $path = sprintf('%s%s.php', $classDir, $class['name']);
+            $path = sprintf('%s%s.php', $classDir, $class['descopedName']);
             $generatedFiles[] = $path;
 
             file_put_contents(
