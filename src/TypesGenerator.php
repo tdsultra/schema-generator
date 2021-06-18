@@ -404,7 +404,14 @@ class TypesGenerator
                 mkdir($classDir, 0777, true);
             }
 
-            $path = sprintf('%s%s.php', $classDir, $className);
+            // Note: To support multiple classes with the same Class name (but in different namespaces)
+            // without Pre/Post fixing the Class name we strip the namespace from the classname if
+            // it exists
+            $classFileName = $className;
+            if(strpos($className, "\\") !== FALSE) {
+                $classFileName = array_pop(explode("\\", $className));
+            }
+            $path = sprintf('%s%s.php', $classDir, $classFileName);
             $generatedFiles[] = $path;
 
             file_put_contents(
