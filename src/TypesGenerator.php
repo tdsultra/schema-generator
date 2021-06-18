@@ -176,8 +176,6 @@ class TypesGenerator
             $class['resource'] = $type;
             $class['config'] = $typeConfig;
 
-            print($class['name'] . " :: " . $class['descopedName'] . "\r\n");
-
             $class['isEnum'] = $this->isEnum($type);
             if ($class['isEnum']) {
                 $class['namespace'] = $typeConfig['namespace'] ?? $config['namespaces']['enum'];
