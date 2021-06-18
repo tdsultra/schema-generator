@@ -160,7 +160,17 @@ class TypesGenerator
 
             $comment = $type->get('rdfs:comment');
 
-            $class['name'] = $typeName;
+            // Note: To support multiple classes with the same Class name (but in different namespaces)
+            // without Pre/Post fixing the Class name we strip the namespace from the classname if
+            // it exists
+            $deScopedClassName = $typeName;
+            if(strpos($typeName, "\\") !== FALSE) {
+                $classNameParts = explode("\\", $typeName);
+                $deScopedClassName = array_pop($classNameParts);
+            }
+
+            // @Note: make sure we use the descopedClassName here too
+            $class['name'] = $deScopedClassName;
             $class['label'] = $comment ? $comment->getValue() : '';
             $class['resource'] = $type;
             $class['config'] = $typeConfig;
@@ -404,14 +414,7 @@ class TypesGenerator
                 mkdir($classDir, 0777, true);
             }
 
-            // Note: To support multiple classes with the same Class name (but in different namespaces)
-            // without Pre/Post fixing the Class name we strip the namespace from the classname if
-            // it exists
-            $classFileName = $className;
-            if(strpos($className, "\\") !== FALSE) {
-                $classFileName = array_pop(explode("\\", $className));
-            }
-            $path = sprintf('%s%s.php', $classDir, $classFileName);
+            $path = sprintf('%s%s.php', $classDir, $deScopedClassName);
             $generatedFiles[] = $path;
 
             file_put_contents(
