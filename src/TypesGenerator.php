@@ -320,36 +320,38 @@ class TypesGenerator
             }
         }
 
-        // Generate ID
-        if ($config['id']['generate']) {
-            foreach ($classes as &$class) {
+        // Generate ID - we do this on a per-class basis so we can 
+        // handle different requirements for multiple namespaces
+        
+        foreach ($classes as &$class) {
 
-                // @TODO Need to get rid this this ASAP
-                if(strpos($class['name'], "\\Core\\") !== FALSE) {
-                    if(isset($class['fields']['ID'])) {
-                        $class['fields']['ID']['resource'] = null;
-                        $class['fields']['ID']['name'] = 'ID';
-                        $class['fields']['ID']['range'] = 'Integer';
-                        $class['fields']['ID']['cardinality'] = CardinalitiesExtractor::CARDINALITY_1_1;
-                        $class['fields']['ID']['ormColumn'] = null;
-                        $class['fields']['ID']['isArray'] = false;
-                        $class['fields']['ID']['isReadable'] = true;
-                        $class['fields']['ID']['isWritable'] = true;
-                        $class['fields']['ID']['isNullable'] = false;
-                        $class['fields']['ID']['isUnique'] = false;
-                        $class['fields']['ID']['isCustom'] = true;
-                        $class['fields']['ID']['isEnum'] = false;
-                        $class['fields']['ID']['isId'] = true;
-                        $class['fields']['ID']['typeHint'] = 'int';
-                        continue;
-                    }
+            // check both top level or local class override
+            $idGenerate = $config['id']['generate'];
+            if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['generate'])) {
+                $idGenerate = $config['types'][$class['name']]['pk']['generate'];
+            }
+
+            if ($idGenerate) {
+                $idName = $config['id']['name'];
+                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['name'])) {
+                    $idName = $config['types'][$class['name']]['pk']['name'];
+                }
+
+                $idGenerationStrategy = $config['id']['generationStrategy'];
+                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['generationStrategy'])) {
+                    $idGenerationStrategy = $config['types'][$class['name']]['pk']['generationStrategy'];
+                }
+
+                $idWritable = $config['id']['writable'];
+                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['writable'])) {
+                    $idWritable = $config['types'][$class['name']]['pk']['writable'];
                 }
 
                 if ($class['hasChild'] || $class['isEnum'] || $class['embeddable']) {
                     continue;
                 }
 
-                switch ($config['id']['generationStrategy']) {
+                switch ($idGenerationStrategy) {
                     case 'auto':
                         $range = 'Integer';
                         $typeHint = 'int';
@@ -359,7 +361,7 @@ class TypesGenerator
                     case 'uuid':
                         $range = 'Text';
                         $typeHint = 'string';
-                        $writable = $config['id']['writable'];
+                        $writable = $idWritable;
                         $nullable = !$writable;
                         break;
                     case 'mongoid':
@@ -378,7 +380,7 @@ class TypesGenerator
 
                 $class['fields'] = [
                     'id' => [
-                        'name' => 'id',
+                        'name' => $idName,
                         'resource' => null,
                         'range' => $range,
                         'cardinality' => CardinalitiesExtractor::CARDINALITY_1_1,
