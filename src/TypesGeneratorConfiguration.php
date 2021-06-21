@@ -174,6 +174,7 @@ final class TypesGeneratorConfiguration implements ConfigurationInterface
                                 ->addDefaultsIfNotSet()
                                 ->children()
                                     ->scalarNode('inheritanceMapping')->defaultNull()->info('The Doctrine inheritance mapping type (override the guessed one)')->end()
+                                    ->scalarNode('tableDef')->defaultNull()->info('The Doctrine ORM\Table definition (in full)')->end()
                                 ->end()
                             ->end()
                             ->scalarNode('parent')->defaultFalse()->info('The parent class, set to false for a top level class')->end()
@@ -197,9 +198,15 @@ final class TypesGeneratorConfiguration implements ConfigurationInterface
                                             CardinalitiesExtractor::CARDINALITY_N_N,
                                             CardinalitiesExtractor::CARDINALITY_UNKNOWN,
                                         ])->end()
-                                        ->scalarNode('ormColumn')->defaultNull()->info('The doctrine column annotation content')->example('type="decimal", precision=5, scale=1, options={"comment" = "my comment"}')->end()
                                         ->arrayNode('groups')
                                             ->info('Symfony Serialization Groups')
+                                            ->prototype('scalar')->end()
+                                        ->end()
+                                        // remove support for ormColumn and replace with key=>value array for better clarity
+                                        //->scalarNode('ormColumn')->defaultNull()->info('The doctrine column annotation content')->example('type="decimal", precision=5, scale=1, options={"comment" = "my comment"}')->end()
+                                        ->arrayNode('orm')
+                                            ->info('Key-Value ORM pairs')
+                                            ->useAttributeAsKey('id')
                                             ->prototype('scalar')->end()
                                         ->end()
                                         ->scalarNode('mappedBy')->defaultNull()->info('The doctrine mapped by attribute')->example('partOfSeason')->end()
