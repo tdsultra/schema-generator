@@ -216,6 +216,7 @@ final class TypesGeneratorConfiguration implements ConfigurationInterface
                                         ->booleanNode('nullable')->defaultTrue()->info('Is the property nullable?')->end()
                                         ->booleanNode('unique')->defaultFalse()->info('The property unique')->end()
                                         ->booleanNode('embedded')->defaultFalse()->info('Is the property embedded?')->end()
+                                        ->booleanNode('formatName')->defaultTrue()->info('Should we format the name for consistency?')->end()
                                         ->scalarNode('columnPrefix')->defaultFalse()->info('The property columnPrefix')->end()
                                     ->end()
                                 ->end()

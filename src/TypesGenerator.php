@@ -590,6 +590,8 @@ class TypesGenerator
         }
 
         switch ($field['range']) {
+            case 'Mixed':
+                return 'mixed';
             case 'Boolean':
                 return 'bool';
             case 'Float':
@@ -606,6 +608,10 @@ class TypesGenerator
             case 'DataType':
             case 'Number':
                 return null;
+        }
+
+        if(!isset($classes[$field['range']])) {
+            throw new \Exception("Couldn't find custom type " . $field['range']);
         }
 
         return $classes[$field['range']]['interfaceName'] ?? $classes[$field['range']]['name'];
