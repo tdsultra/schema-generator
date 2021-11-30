@@ -696,8 +696,13 @@ class TypesGenerator
                 $columnPrefix = $propertyConfig['columnPrefix'] ?? false;
             }
 
+            $formattedPropertyName = $propertyName;
+            if(!isset($propertyConfig['formatName']) || $propertyConfig['formatName']) {
+                $formattedPropertyName = $this->getFieldName($propertyName, $isArray);
+            }
+
             $class['fields'][$propertyName] = [
-                'name' => $this->getFieldName($propertyName, $isArray),
+                'name' => $formattedPropertyName,
                 'resource' => $property,
                 'range' => $ranges[0],
                 'cardinality' => $cardinality,
