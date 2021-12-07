@@ -40,6 +40,10 @@ final class ApiPlatformCoreAnnotationGenerator extends AbstractAnnotationGenerat
 
         $arguments = [sprintf('iri="%s"', $resource->getUri())];
 
+        if(isset($class['shortName'])) {
+            $arguments[] = sprintf('shortName="%s"', $class['shortName']);
+        }
+
         if (isset($class['operations'])) {
             $operations = $this->validateClassOperations((array) $class['operations']);
             foreach ($operations as $operationTarget => $targetOperations) {

@@ -175,6 +175,7 @@ class TypesGenerator
             $class['label'] = $comment ? $comment->getValue() : '';
             $class['resource'] = $type;
             $class['config'] = $typeConfig;
+            $class['shortName'] = $typeConfig['shortName'] ?? null;
 
             $class['isEnum'] = $this->isEnum($type);
             if ($class['isEnum']) {

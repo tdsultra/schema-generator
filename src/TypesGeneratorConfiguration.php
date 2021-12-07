@@ -177,6 +177,7 @@ final class TypesGeneratorConfiguration implements ConfigurationInterface
                                     ->scalarNode('tableDef')->defaultNull()->info('The Doctrine ORM\Table definition (in full)')->end()
                                 ->end()
                             ->end()
+                            ->scalarNode('shortName')->defaultFalse()->info('ApiResource shortName if needed (i.e. for conflicting class names in different namespaces)')->end()
                             ->scalarNode('parent')->defaultFalse()->info('The parent class, set to false for a top level class')->end()
                             ->scalarNode('guessFrom')->defaultValue('Thing')->info('If declaring a custom class, this will be the class from which properties type will be guessed')->end()
                             ->booleanNode('allProperties')->defaultFalse()->info('Import all existing properties')->end()
