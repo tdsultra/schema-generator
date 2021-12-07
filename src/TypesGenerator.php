@@ -398,6 +398,19 @@ class TypesGenerator
                     ],
                 ] + $class['fields'];
             }
+            // we may still want to define an existing field as the ID which is managed externally,
+            // this happens if we do not auto generate but we do specify a name
+            else {
+                $idName = $config['id']['name'];
+                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['name'])) {
+                    $idName = $config['types'][$class['name']]['pk']['name'];
+                }
+                if($idName) {
+                    if(isset($class['fields'][$idName])) {
+                        $class['fields'][$idName]['isId'] = true;
+                    }
+                }
+            }
         }
 
         // Initialize annotation generators
