@@ -326,6 +326,12 @@ class TypesGenerator
         
         foreach ($classes as &$class) {
 
+            if(isset($config['types'][$class['name']]['accessorMethods'])) {
+                $class['accessorMethods'] = $config['types'][$class['name']]['accessorMethods'];
+            }else{
+                $class['accessorMethods'] = $config['accessorMethods'];
+            }
+
             // check both top level or local class override
             $idGenerate = $config['id']['generate'];
             if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['generate'])) {
