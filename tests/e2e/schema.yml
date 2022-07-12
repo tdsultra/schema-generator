@@ -1,5 +1,10 @@
 # app/config/schema.yml
 
+namespaces:
+    entity: App\Schema\Entity
+    enum: App\Schema\Enum
+    interface: App\Schema\Model
+
 # The list of types and properties we want to use
 types:
     # Parent class of Person
@@ -7,25 +12,44 @@ types:
         properties:
             name: ~
     Person:
+        parent: ~
+        operations:
+            Get: ~
+            GetCollection:
+                routeName: get_person_collection
+            Delete:
+                security: "is_granted('ROLE_ADMIN')"
+        attributes:
+            ORM\Entity: ~
+            ApiResource:
+                security: "is_granted('ROLE_USER')"
         properties:
             familyName: ~
             givenName: ~
             additionalName: ~
-            gender: ~
-            address: ~
+            gender: { range: https://schema.org/GenderType }
+            address: { range: https://schema.org/PostalAddress }
             birthDate: ~
             telephone: ~
-            email: ~
+            email: { unique: true, attributes: { ORM\Column: ~, ApiProperty: { security: "is_granted('ROLE_ADMIN')" } } }
             url: ~
-            jobTitle: ~
-    PostalAddress:
-        # Disable the generation of the class hierarchy for this type
-        parent: false
+            siblings: { cardinality: "(0..*)" }
+            knowsAbout: { range: https://schema.org/Thing }
+            customColumn: { range: https://schema.org/Text, attributes: { ORM\Column: { type: "decimal", precision: 5, scale: 1, options: { comment: "my comment" } } } }
+    Brand:
         properties:
-            # Force the type of the addressCountry property to text
-            addressCountry: { range: "Text" }
+            name: ~
+            slogan: ~
+    ContactPoint:
+        properties:
+            telephone: ~
+    PostalAddress:
+        parent: ~
+        properties:
+            addressCountry: { range: https://schema.org/Text }
             addressLocality: ~
             addressRegion: ~
-            postOfficeBoxNumber: ~
             postalCode: ~
             streetAddress: ~
+    GenderType:
+        properties: {}

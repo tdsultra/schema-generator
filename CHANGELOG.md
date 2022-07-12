@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.0.1
+
+* fix: use FQCN when using an enum in callback constraint and remove ApiResource from the enum
+* fix: make sure relations are generated
+* fix: inheritance from Intangible should not create warning
+
+## 4.0.0
+
+* feat: support updating existing files
+* feat: generate PHP 8 attributes
+* feat: generate API Platform Core `security` properties for classes and properties
+* feat: support for HTTPS URLs of Schema.org
+* feat: add YAML support for Doctrine ORM "resolve entity"
+* feat: support for interface namespaces
+* feat: compatibility with Symfony 6
+* feat: compatibility with PHP 8.1
+* feat: now uses Nette generator
+* fix: the whole code base has been refactored, a log of bugs have been fixed
+
+## 3.0.0
+
+* Support for [the Web Ontology Language (OWL)](https://en.wikipedia.org/wiki/Web_Ontology_Language) (including for [the ActivityStream vocabulary](https://www.w3.org/TR/activitystreams-core/))
+* Support for [XML Schema](https://en.wikipedia.org/wiki/XML_Schema_(W3C)) types
+* Compatibility with the latest version of Schema.org
+* Improved PHP type hints generation (including support for typed properties)
+* Improved PHPDoc support
+* Upgrade to EasyRDF 1 and Doctrine Inflector 2
+* More flexible configuration
+* The `generate-types` command has been renamed `generate`
+
 ## 2.2.2
 
 * Update to Symfony 5

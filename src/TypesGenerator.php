@@ -13,20 +13,30 @@ declare(strict_types=1);
 
 namespace ApiPlatform\SchemaGenerator;
 
-use ApiPlatform\SchemaGenerator\AnnotationGenerator\AnnotationGeneratorInterface;
+use ApiPlatform\SchemaGenerator\ClassMutator\AnnotationsAppender;
+use ApiPlatform\SchemaGenerator\ClassMutator\AttributeAppender;
+use ApiPlatform\SchemaGenerator\ClassMutator\ClassIdAppender;
+use ApiPlatform\SchemaGenerator\ClassMutator\ClassInterfaceMutator;
+use ApiPlatform\SchemaGenerator\ClassMutator\ClassParentMutator;
+use ApiPlatform\SchemaGenerator\ClassMutator\ClassPropertiesAppender;
+use ApiPlatform\SchemaGenerator\ClassMutator\ClassPropertiesTypehintMutator;
+use ApiPlatform\SchemaGenerator\Model\Class_;
+use ApiPlatform\SchemaGenerator\Model\Use_;
+use ApiPlatform\SchemaGenerator\PropertyGenerator\PropertyGeneratorInterface;
+use ApiPlatform\SchemaGenerator\Schema\ClassMutator\EnumClassMutator as SchemaEnumClassMutator;
+use ApiPlatform\SchemaGenerator\Schema\Model\Class_ as SchemaClass;
+use ApiPlatform\SchemaGenerator\Schema\Model\Property as SchemaProperty;
+use ApiPlatform\SchemaGenerator\Schema\PropertyGenerator\IdPropertyGenerator;
+use ApiPlatform\SchemaGenerator\Schema\PropertyGenerator\PropertyGenerator;
+use ApiPlatform\SchemaGenerator\Schema\TypeConverter;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
-use Doctrine\Common\Inflector\Inflector;
-use MyCLabs\Enum\Enum;
-use PhpCsFixer\Cache\NullCacheManager;
-use PhpCsFixer\Differ\NullDiffer;
-use PhpCsFixer\Error\ErrorsManager;
-use PhpCsFixer\FixerFactory;
-use PhpCsFixer\Linter\Linter;
-use PhpCsFixer\RuleSet;
-use PhpCsFixer\Runner\Runner;
+use EasyRdf\Graph as RdfGraph;
+use EasyRdf\RdfNamespace;
+use EasyRdf\Resource as RdfResource;
+use Psr\Log\LoggerAwareTrait;
 use Psr\Log\LoggerInterface;
-use Twig\Environment;
+use Symfony\Component\String\Inflector\InflectorInterface;
 
 /**
  * Generates entity files.
@@ -35,548 +45,341 @@ use Twig\Environment;
  */
 class TypesGenerator
 {
+    use LoggerAwareTrait;
+
     /**
      * @var string
      *
      * @internal
      */
-    public const SCHEMA_ORG_ENUMERATION = 'http://schema.org/Enumeration';
+    public const SCHEMA_ORG_ENUMERATION = 'https://schema.org/Enumeration';
 
     /**
-     * @var string
+     * @var string[] the RDF types of classes in the vocabs
      */
-    private const SCHEMA_ORG_DOMAIN = 'schema:domainIncludes';
+    public static array $classTypes = [
+      'rdfs:Class',
+      'owl:Class',
+    ];
 
     /**
-     * @var string
+     * @var string[] the RDF types of properties in the vocabs
      */
-    private const SCHEMA_ORG_RANGE = 'schema:rangeIncludes';
+    public static array $propertyTypes = [
+        'rdf:Property',
+        'owl:ObjectProperty',
+        'owl:DatatypeProperty',
+    ];
 
     /**
-     * @var string
+     * @var string[] the RDF types of domains in the vocabs
      */
-    private const SCHEMA_ORG_SUPERSEDED_BY = 'schema:supersededBy';
+    public static array $domainProperties = [
+      'schema:domainIncludes',
+      'rdfs:domain',
+    ];
+
+    private PhpTypeConverterInterface $phpTypeConverter;
+    private InflectorInterface $inflector;
+    private CardinalitiesExtractor $cardinalitiesExtractor;
+    private PropertyGeneratorInterface $propertyGenerator;
+
+    public function __construct(InflectorInterface $inflector, PhpTypeConverterInterface $phpTypeConverter, CardinalitiesExtractor $cardinalitiesExtractor, GoodRelationsBridge $goodRelationsBridge)
+    {
+        $this->inflector = $inflector;
+        $this->phpTypeConverter = $phpTypeConverter;
+        $this->cardinalitiesExtractor = $cardinalitiesExtractor;
+        $this->propertyGenerator = new PropertyGenerator($goodRelationsBridge, new TypeConverter(), $phpTypeConverter);
+
+        RdfNamespace::set('schema', 'https://schema.org/');
+    }
 
     /**
-     * @var Environment
+     * Generates files.
+     *
+     * @param RdfGraph[]    $graphs
+     * @param Configuration $config
+     *
+     * @return Class_[]
      */
-    private $twig;
-
-    /**
-     * @var LoggerInterface
-     */
-    private $logger;
-
-    /**
-     * @var \EasyRdf_Graph[]
-     */
-    private $graphs;
-
-    /**
-     * @var CardinalitiesExtractor
-     */
-    private $cardinalitiesExtractor;
-
-    /**
-     * @var GoodRelationsBridge
-     */
-    private $goodRelationsBridge;
-
-    /**
-     * @var array
-     */
-    private $cardinalities;
-
-    /**
-     * @param \EasyRdf_Graph[] $graphs
-     */
-    public function __construct(Environment $twig, LoggerInterface $logger, array $graphs, CardinalitiesExtractor $cardinalitiesExtractor, GoodRelationsBridge $goodRelationsBridge)
+    public function generate(array $graphs, array $config): array
     {
         if (!$graphs) {
             throw new \InvalidArgumentException('At least one graph must be injected.');
         }
 
-        $this->twig = $twig;
-        $this->logger = $logger;
-        $this->graphs = $graphs;
-        $this->cardinalitiesExtractor = $cardinalitiesExtractor;
-        $this->goodRelationsBridge = $goodRelationsBridge;
-
-        $this->cardinalities = $this->cardinalitiesExtractor->extract();
-    }
-
-    /**
-     * Generates files.
-     */
-    public function generate(array $config): void
-    {
-        $baseClass = [
-            'constants' => [],
-            'fields' => [],
-            'uses' => [],
-            'hasConstructor' => false,
-            'parentHasConstructor' => false,
-            'hasChild' => false,
-            'abstract' => false,
-        ];
-
-        $typesToGenerate = [];
-
-        if (!$config['types']) {
-            foreach ($this->graphs as $graph) {
-                $typesToGenerate = $graph->allOfType('rdfs:Class');
-            }
-        } else {
-            foreach ($config['types'] as $typeName => $typeConfig) {
-                $resource = null;
-                foreach ($this->graphs as $graph) {
-                    $resources = $graph->resources();
-
-                    if (isset($resources[$typeConfig['vocabularyNamespace'].$typeName])) {
-                        $resource = $graph->resource($typeConfig['vocabularyNamespace'].$typeName, 'rdfs:Class');
-                        break;
-                    }
-                }
-
-                if ($resource) {
-                    $typesToGenerate[$typeName] = $resource;
-                } else {
-                    $this->logger->warning('Type "{typeName}" cannot be found. Using "{guessFrom}" type to generate entity.', ['typeName' => $typeName, 'guessFrom' => $typeConfig['guessFrom']]);
-                    if (isset($graph)) {
-                        $type = $graph->resource($typeConfig['vocabularyNamespace'].$typeConfig['guessFrom'], 'rdfs:Class');
-                        $typesToGenerate[$typeName] = $type;
-                    }
-                }
-            }
-        }
+        [$typeNamesToGenerate, $types] = $this->defineTypesToGenerate($graphs, $config);
 
         $classes = [];
-        $propertiesMap = $this->createPropertiesMap($typesToGenerate);
+        $propertiesMap = $this->createPropertiesMap($graphs, $types, $config);
+        $cardinalities = $this->cardinalitiesExtractor->extract($graphs);
 
-        foreach ($typesToGenerate as $typeName => $type) {
-            $typeName = \is_string($typeName) ? $typeName : $type->localName();
-            $typeConfig = $config['types'][$typeName] ?? null;
-            $class = $baseClass;
-
-            $comment = $type->get('rdfs:comment');
-
-            // Note: To support multiple classes with the same Class name (but in different namespaces)
-            // without Pre/Post fixing the Class name we strip the namespace from the classname if
-            // it exists
-            $deScopedClassName = $typeName;
-            if(strpos($typeName, "\\") !== FALSE) {
-                $classNameParts = explode("\\", $typeName);
-                $deScopedClassName = array_pop($classNameParts);
+        foreach ($types as $typeName => $type) {
+            if ($class = $this->buildClass($graphs, $cardinalities, $typeName, $type, $propertiesMap, $config)) {
+                $classes[$typeName] = $class;
             }
-
-            // @Note: make sure we use the descopedClassName here too
-            $class['name'] = $typeName;
-            $class['descopedName'] = $deScopedClassName;
-            $class['label'] = $comment ? $comment->getValue() : '';
-            $class['resource'] = $type;
-            $class['config'] = $typeConfig;
-            $class['shortName'] = $typeConfig['shortName'] ?? null;
-
-            $class['isEnum'] = $this->isEnum($type);
-            if ($class['isEnum']) {
-                $class['namespace'] = $typeConfig['namespace'] ?? $config['namespaces']['enum'];
-                $class['parent'] = 'Enum';
-                $class['uses'][] = Enum::class;
-
-                // Constants
-                foreach ($this->graphs as $graph) {
-                    foreach ($graph->allOfType($type->getUri()) as $instance) {
-                        $class['constants'][$instance->localName()] = [
-                            'name' => strtoupper(substr(preg_replace('/([A-Z])/', '_$1', $instance->localName()), 1)),
-                            'resource' => $instance,
-                            'value' => $instance->getUri(),
-                        ];
-                    }
-                }
-            } else {
-                // Entities
-                $class['namespace'] = $typeConfig['namespaces']['class'] ?? $config['namespaces']['entity'];
-
-                // Parent
-                $class['parent'] = $typeConfig['parent'] ?? null;
-                if (null === $class['parent']) {
-                    $numberOfSupertypes = \count($type->all('rdfs:subClassOf'));
-
-                    if ($numberOfSupertypes > 1) {
-                        $this->logger->warning(sprintf('The type "%s" has several supertypes. Using the first one.', $type->localName()));
-                    }
-
-                    $class['parent'] = $numberOfSupertypes ? $type->all('rdfs:subClassOf')[0]->localName() : false;
-                }
-
-                if (isset($class['parent']) && isset($config['types'][$class['parent']]['namespaces']['class'])) {
-                    $parentNamespace = $config['types'][$class['parent']]['namespaces']['class'];
-
-                    if ($parentNamespace !== $class['namespace']) {
-                        $class['uses'][] = $parentNamespace.'\\'.$class['parent'];
-                    }
-                }
-
-                // Embeddable
-                $class['embeddable'] = $typeConfig['embeddable'] ?? false;
-
-                if (!$config['types'] && $class['parent'] && !isset($config['types'][$class['parent']])) {
-                    $this->logger->error(sprintf('The type "%s" (parent of "%s") doesn\'t exist', $class['parent'], $type->localName()));
-                }
-
-                // Interfaces
-                if ($config['useInterface']) {
-                    $class['interfaceNamespace'] = isset($typeConfig['namespaces']['interface']) && $typeConfig['namespaces']['interface'] ? $typeConfig['namespaces']['interface'] : $config['namespaces']['interface'];
-                    $class['interfaceName'] = sprintf('%sInterface', $typeName);
-                }
-            }
-
-            // Fields
-            if (!$typeConfig['allProperties'] && isset($typeConfig['properties']) && \is_array($typeConfig['properties'])) {
-                foreach ($typeConfig['properties'] as $key => $value) {
-                    foreach ($propertiesMap[$type->getUri()] as $property) {
-                        if ($key !== $property->localName()) {
-                            continue;
-                        }
-
-                        $class = $this->generateField($config, $class, $type, $typeName, $property->localName(), $property);
-                        continue 2;
-                    }
-
-                    // Add custom fields (non schema.org)
-                    $this->logger->info(sprintf('The property "%s" (type "%s") is a custom property.', $key, $type->localName()));
-                    $class = $this->generateField($config, $class, $type, $typeName, $key);
-                }
-            } else {
-                // All properties
-                foreach ($propertiesMap[$type->getUri()] as $property) {
-                    if ($property->hasProperty(self::SCHEMA_ORG_SUPERSEDED_BY)) {
-                        $supersededBy = $property->get('schema:supersededBy');
-                        $this->logger->warning(sprintf('The property "%s" is superseded by "%s". Using the superseding property.', $property->localName(), $supersededBy->localName()));
-                    } else {
-                        $class = $this->generateField($config, $class, $type, $typeName, $property->localName(), $property);
-                    }
-                }
-            }
-
-            $classes[$typeName] = $class;
         }
 
-        // Second pass
-        foreach ($classes as &$class) {
-            if ($class['parent'] && isset($classes[$class['parent']])) {
-                $classes[$class['parent']]['hasChild'] = true;
-                $class['parentHasConstructor'] = $classes[$class['parent']]['hasConstructor'];
+        foreach ($typeNamesToGenerate as $typeNameToGenerate) {
+            $class = $classes[$typeNameToGenerate];
+            while (($parent = $class->parent()) && !$class->isParentEnum()) {
+                if (!isset($classes[$parent])) {
+                    $this->logger ? $this->logger->error(sprintf('The type "%s" (parent of "%s") doesn\'t exist', $parent, $class->rdfType())) : null;
+                    break;
+                }
+                if (!\in_array($parent, $typeNamesToGenerate, true)) {
+                    $typeNamesToGenerate[] = $parent;
+                }
+                $class = $classes[$parent];
             }
+        }
+        $classes = array_intersect_key($classes, array_flip($typeNamesToGenerate));
+        $types = array_intersect_key($types, array_flip($typeNamesToGenerate));
 
-            foreach ($class['fields'] as &$field) {
-                $field['isEnum'] = isset($classes[$field['range']]) && $classes[$field['range']]['isEnum'];
-                $field['typeHint'] = $this->fieldToTypeHint($config, $field, $classes) ?? false;
+        $referencedByClasses = [];
 
-                if ($field['isArray']) {
-                    $field['adderRemoverTypeHint'] = $this->fieldToAdderRemoverTypeHint($field, $classes) ?? false;
+        // Second pass
+        foreach ($classes as $class) {
+            /** @var $class SchemaClass */
+            if ($class->hasParent() && !$class->isParentEnum()) {
+                $parentClass = $classes[$class->parent()] ?? null;
+                if ($parentClass) {
+                    $parentClass->hasChild = true;
+                    $class->parentHasConstructor = $parentClass->hasConstructor;
                 }
             }
+
+            foreach ($class->properties() as $property) {
+                if (!$property instanceof SchemaProperty) {
+                    throw new \LogicException(sprintf('Property "%s" has to be an instance of "%s".', $property->name(), SchemaProperty::class));
+                }
+                $typeName = $property->rangeName;
+                if (isset($classes[$typeName])) {
+                    $property->reference = $classes[$typeName];
+                    $referencedByClasses[$typeName][$class->name()] = $class;
+                }
+            }
+
+            (new ClassPropertiesTypehintMutator($this->phpTypeConverter, $config, $classes))($class, []);
         }
 
         // Third pass
-        foreach ($classes as &$class) {
-            $class['abstract'] = $config['types'][$class['name']]['abstract'] ?? $class['hasChild'];
+        foreach ($classes as $class) {
+            $class->isReferencedBy = $referencedByClasses[$class->name()] ?? [];
+            /* @var $class SchemaClass */
+            $class->isAbstract = $config['types'][$class->name()]['abstract']
+                // Class is abstract if it has child and if it is not referenced by a relation
+                ?? ($class->hasChild && !$class->isReferencedBy);
 
             // When including all properties, ignore properties already set on parent
-            if (isset($config['types'][$class['name']]['allProperties']) && $config['types'][$class['name']]['allProperties'] && isset($classes[$class['parent']])) {
-                $type = $class['resource'];
-
+            if (($config['types'][$class->name()]['allProperties'] ?? true) && isset($classes[$class->parent()])) {
+                $type = $class->resource();
                 foreach ($propertiesMap[$type->getUri()] as $property) {
-                    if (!isset($class['fields'][$property->localName()])) {
+                    $propertyName = $property->localName();
+                    if (!$class->hasProperty($propertyName)) {
                         continue;
                     }
 
-                    $parentConfig = $config['types'][$class['parent']] ?? null;
-                    $parentClass = $classes[$class['parent']];
+                    $parentConfig = $config['types'][$class->parent()] ?? null;
+                    /** @var SchemaClass|null $parentClass */
+                    $parentClass = $classes[$class->parent()];
 
                     while ($parentClass) {
-                        if (!isset($parentConfig['properties']) ||
-                            !\is_array($parentConfig['properties']) ||
-                            0 === \count($parentConfig['properties'])
-                        ) {
-                            // Unset implicit property
-                            $parentType = $parentClass['resource'];
-                            if (\in_array($property, $propertiesMap[$parentType->getUri()], true)) {
-                                unset($class['fields'][$property->localName()]);
-                                continue 2;
-                            }
-                        } else {
-                            // Unset explicit property
-                            if (\array_key_exists($property->localName(), $parentConfig['properties'])) {
-                                unset($class['fields'][$property->localName()]);
-                                continue 2;
-                            }
+                        if (\array_key_exists($propertyName, $parentConfig['properties'] ?? []) || \in_array($property, $propertiesMap[$parentClass->rdfType()], true)) {
+                            $class->removePropertyByName($propertyName);
+                            continue 2;
                         }
 
-                        $parentConfig = $parentClass['parent'] ? ($config['types'][$parentClass['parent']] ?? null) : null;
-                        $parentClass = $parentClass['parent'] ? $classes[$parentClass['parent']] : null;
+                        $parentConfig = $parentClass->parent() ? ($config['types'][$parentClass->parent()] ?? null) : null;
+                        $parentClass = $parentClass->parent() && isset($classes[$parentClass->parent()]) ? $classes[$parentClass->parent()] : null;
                     }
                 }
             }
         }
 
-        // Generate ID - we do this on a per-class basis so we can 
-        // handle different requirements for multiple namespaces
-        
-        foreach ($classes as &$class) {
-
-            if(isset($config['types'][$class['name']]['accessorMethods'])) {
-                $class['accessorMethods'] = $config['types'][$class['name']]['accessorMethods'];
-            }else{
-                $class['accessorMethods'] = $config['accessorMethods'];
-            }
-
-            // check both top level or local class override
-            $idGenerate = $config['id']['generate'];
-            if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['generate'])) {
-                $idGenerate = $config['types'][$class['name']]['pk']['generate'];
-            }
-
-            if ($idGenerate) {
-                $idName = $config['id']['name'];
-                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['name'])) {
-                    $idName = $config['types'][$class['name']]['pk']['name'];
-                }
-
-                $idGenerationStrategy = $config['id']['generationStrategy'];
-                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['generationStrategy'])) {
-                    $idGenerationStrategy = $config['types'][$class['name']]['pk']['generationStrategy'];
-                }
-
-                $idWritable = $config['id']['writable'];
-                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['writable'])) {
-                    $idWritable = $config['types'][$class['name']]['pk']['writable'];
-                }
-
-                if ($class['hasChild'] || $class['isEnum'] || $class['embeddable']) {
-                    continue;
-                }
-
-                switch ($idGenerationStrategy) {
-                    case 'auto':
-                        $range = 'Integer';
-                        $typeHint = 'int';
-                        $writable = false;
-                        $nullable = true;
-                        break;
-                    case 'uuid':
-                        $range = 'Text';
-                        $typeHint = 'string';
-                        $writable = $idWritable;
-                        $nullable = !$writable;
-                        break;
-                    case 'mongoid':
-                        $range = 'Text';
-                        $typeHint = 'string';
-                        $writable = false;
-                        $nullable = true;
-                        break;
-                    default:
-                        $range = 'Text';
-                        $typeHint = 'string';
-                        $writable = true;
-                        $nullable = false;
-                        break;
-                }
-
-                $class['fields'] = [
-                    'id' => [
-                        'name' => $idName,
-                        'resource' => null,
-                        'range' => $range,
-                        'cardinality' => CardinalitiesExtractor::CARDINALITY_1_1,
-                        'ormColumn' => null,
-                        'orm' => null,
-                        'isArray' => false,
-                        'isReadable' => true,
-                        'isWritable' => $writable,
-                        'isNullable' => $nullable,
-                        'isUnique' => false,
-                        'isCustom' => true,
-                        'isEnum' => false,
-                        'isId' => true,
-                        'typeHint' => $typeHint,
-                    ],
-                ] + $class['fields'];
+        // Generate ID
+        if ($config['id']['generate']) {
+            foreach ($classes as $class) {
+                (new ClassIdAppender(new IdPropertyGenerator(), $config))($class, []);
             }
             // we may still want to define an existing field as the ID which is managed externally,
             // this happens if we do not auto generate but we do specify a name
-            else {
-                $idName = $config['id']['name'];
-                if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['name'])) {
-                    $idName = $config['types'][$class['name']]['pk']['name'];
-                }
-                if($idName) {
-                    if(isset($class['fields'][$idName])) {
-                        $class['fields'][$idName]['isId'] = true;
-                    }
+
+        }
+        else {
+            $idName = $config['id']['name'];
+            if(isset($config['types'][$class['name']]['pk']) && isset($config['types'][$class['name']]['pk']['name'])) {
+                $idName = $config['types'][$class['name']]['pk']['name'];
+            }
+            if($idName) {
+                if(isset($class['fields'][$idName])) {
+                    $class['fields'][$idName]['isId'] = true;
                 }
             }
         }
-
+        
         // Initialize annotation generators
         $annotationGenerators = [];
         foreach ($config['annotationGenerators'] as $annotationGenerator) {
-            $generator = new $annotationGenerator($this->logger, $this->graphs, $this->cardinalities, $config, $classes);
+            $generator = new $annotationGenerator($this->phpTypeConverter, $this->inflector, $config, $classes);
+            if (method_exists($generator, 'setLogger')) {
+                $generator->setLogger($this->logger);
+            }
 
             $annotationGenerators[] = $generator;
         }
 
-        $interfaceMappings = [];
-        $generatedFiles = [];
-
-        foreach ($classes as $className => &$class) {
-            $class['uses'] = $this->generateClassUses($annotationGenerators, $classes, $className);
-            $class['annotations'] = $this->generateClassAnnotations($annotationGenerators, $className);
-            if (false === isset($typesToGenerate[$className])) {
-                $class['interfaceAnnotations'] = $this->generateInterfaceAnnotations($annotationGenerators, $className);
+        // Initialize attribute generators
+        $attributeGenerators = [];
+        foreach ($config['attributeGenerators'] as $attributeGenerator) {
+            $generator = new $attributeGenerator($this->phpTypeConverter, $this->inflector, $config, $classes);
+            if (method_exists($generator, 'setLogger')) {
+                $generator->setLogger($this->logger);
             }
 
-            foreach ($class['constants'] as $constantName => $constant) {
-                $class['constants'][$constantName]['annotations'] = $this->generateConstantAnnotations($annotationGenerators, $className, $constantName);
-            }
-
-            foreach ($class['fields'] as $fieldName => &$field) {
-                $field['annotations'] = $this->generateFieldAnnotations($annotationGenerators, $className, $fieldName);
-                $field['getterAnnotations'] = $this->generateGetterAnnotations($annotationGenerators, $className, $fieldName);
-
-                if ($field['isArray']) {
-                    $field['adderAnnotations'] = $this->generateAdderAnnotations($annotationGenerators, $className, $fieldName);
-                    $field['removerAnnotations'] = $this->generateRemoverAnnotations($annotationGenerators, $className, $fieldName);
-                } else {
-                    $field['setterAnnotations'] = $this->generateSetterAnnotations($annotationGenerators, $className, $fieldName);
-                }
-            }
-
-            $classDir = $this->namespaceToDir($config, $class['namespace']);
-
-            if (!file_exists($classDir)) {
-                mkdir($classDir, 0777, true);
-            }
-
-            // make sure we use the $class name rather than $className since
-            // $className is not descoped
-            $path = sprintf('%s%s.php', $classDir, $class['descopedName']);
-            $generatedFiles[] = $path;
-
-            file_put_contents(
-                $path,
-                $this->twig->render('class.php.twig', [
-                    'config' => $config,
-                    'class' => $class,
-                ])
-            );
-
-            if (isset($class['interfaceNamespace'])) {
-                $interfaceDir = $this->namespaceToDir($config, $class['interfaceNamespace']);
-
-                if (!file_exists($interfaceDir)) {
-                    mkdir($interfaceDir, 0777, true);
-                }
-
-                $path = sprintf('%s%s.php', $interfaceDir, $class['interfaceName']);
-                $generatedFiles[] = $path;
-                file_put_contents(
-                    $path,
-                    $this->twig->render('interface.php.twig', [
-                        'config' => $config,
-                        'class' => $class,
-                    ])
-                );
-
-                if ($config['doctrine']['resolveTargetEntityConfigPath'] && !$class['abstract']) {
-                    $interfaceMappings[$class['interfaceNamespace'].'\\'.$class['interfaceName']] = $class['namespace'].'\\'.$className;
-                }
-            }
+            $attributeGenerators[] = $generator;
         }
 
-        if (!$interfaceMappings && $config['doctrine']['resolveTargetEntityConfigPath']) {
-            $file = $config['output'].'/'.$config['doctrine']['resolveTargetEntityConfigPath'];
-            $dir = \dirname($file);
-            if (!file_exists($dir)) {
-                mkdir($dir, 0777, true);
-            }
-
-            file_put_contents(
-                $file,
-                $this->twig->render('doctrine.xml.twig', ['mappings' => $interfaceMappings])
-            );
-
-            $generatedFiles[] = $file;
+        $attributeAppender = new AttributeAppender($classes, $attributeGenerators);
+        foreach ($classes as $class) {
+            (new AnnotationsAppender($classes, $annotationGenerators, $types))($class, []);
+            $attributeAppender($class, []);
+        }
+        foreach ($classes as $class) {
+            $attributeAppender->appendLate($class);
         }
 
-        $this->fixCs($generatedFiles);
+        return $classes;
     }
 
     /**
-     * Tests if a type is an enum.
+     * @param RdfGraph[]                   $graphs
+     * @param array<string, string>        $cardinalities
+     * @param array<string, RdfResource[]> $propertiesMap
+     * @param Configuration                $config
      */
-    private function isEnum(\EasyRdf_Resource $type): bool
+    private function buildClass(array $graphs, array $cardinalities, string $typeName, RdfResource $type, array $propertiesMap, array $config): ?SchemaClass
     {
-        $subClassOf = $type->get('rdfs:subClassOf');
+        if ($type->isA('owl:DeprecatedClass')) {
+            if (!isset($config['types'][$typeName])) {
+                return null;
+            }
 
-        return $subClassOf && self::SCHEMA_ORG_ENUMERATION === $subClassOf->getUri();
+            $this->logger ? $this->logger->warning('The type "{type}" is deprecated', ['type' => $type->getUri()]) : null;
+        }
+
+        $typeConfig = $config['types'][$typeName] ?? null;
+        $parent = $typeConfig['parent'] ?? null;
+        $class = new SchemaClass($typeName, $type, $parent);
+        $class->operations = $typeConfig['operations'] ?? [];
+
+        if ($class->isEnum()) {
+            (new SchemaEnumClassMutator(
+                $this->phpTypeConverter,
+                $graphs,
+                $config['namespaces']['enum']
+            ))($class, []);
+        } else {
+            $class->namespace = $typeConfig['namespaces']['class'] ?? $config['namespaces']['entity'];
+
+            // Interfaces
+            if ($config['useInterface']) {
+                $interfaceNamespace = isset($typeConfig['namespaces']['interface']) && $typeConfig['namespaces']['interface'] ? $typeConfig['namespaces']['interface'] : $config['namespaces']['interface'];
+                (new ClassInterfaceMutator($interfaceNamespace))($class, []);
+            }
+
+            $classParentMutator = new ClassParentMutator($config, $this->phpTypeConverter);
+            if ($this->logger) {
+                $classParentMutator->setLogger($this->logger);
+            }
+            ($classParentMutator)($class, []);
+        }
+
+        $classPropertiesAppender = new ClassPropertiesAppender($this->propertyGenerator, $config, $propertiesMap);
+        if ($this->logger) {
+            $classPropertiesAppender->setLogger($this->logger);
+        }
+        ($classPropertiesAppender)($class, ['graphs' => $graphs, 'cardinalities' => $cardinalities]);
+        $class->isEmbeddable = $typeConfig['embeddable'] ?? false;
+
+        if ($config['doctrine']['useCollection']) {
+            $class->addUse(new Use_(ArrayCollection::class));
+            $class->addUse(new Use_(Collection::class));
+        }
+
+        return $class;
     }
 
     /**
      * Gets the parent classes of the current one and add them to $parentClasses array.
      *
-     * @param string[] $parentClasses
+     * @param RdfGraph[]    $graphs
+     * @param RdfResource[] $parentClasses
+     *
+     * @return RdfResource[]
      */
-    private function getParentClasses(\EasyRdf_Resource $resource, array $parentClasses = []): array
+    private function getParentClasses(array $graphs, RdfResource $resource, array $parentClasses = []): array
     {
         if ([] === $parentClasses) {
-            return $this->getParentClasses($resource, [$resource->getUri()]);
+            return $this->getParentClasses($graphs, $resource, [$resource]);
         }
 
-        $subclasses = $resource->all('rdfs:subClassOf');
-
-        if (empty($subclasses)) {
-            return $parentClasses;
+        $filterBNodes = fn ($parentClasses) => array_filter($parentClasses, fn ($parentClass) => !$parentClass->isBNode());
+        if (!$subclasses = $resource->all('rdfs:subClassOf', 'resource')) {
+            return $filterBNodes($parentClasses);
         }
 
-        $parentClass = $subclasses[0];
-        $parentClasses[] = $parentClass->getUri();
+        $parentClassUri = $subclasses[0]->getUri();
+        $parentClasses[] = $subclasses[0];
 
-        foreach ($this->graphs as $graph) {
-            foreach ($graph->allOfType('rdfs:Class') as $type) {
-                if ($type->getUri() === $parentClass->getUri()) {
-                    $parentClasses = $this->getParentClasses($type, $parentClasses);
-
-                    break 2;
+        foreach ($graphs as $graph) {
+            foreach (self::$classTypes as $classType) {
+                foreach ($graph->allOfType($classType) as $type) {
+                    if ($type->getUri() === $parentClassUri) {
+                        return $this->getParentClasses($graphs, $type, $parentClasses);
+                    }
                 }
             }
         }
 
-        return $parentClasses;
+        return $filterBNodes($parentClasses);
     }
 
     /**
      * Creates a map between classes and properties.
+     *
+     * @param RdfGraph[]    $graphs
+     * @param RdfResource[] $types
+     * @param Configuration $config
+     *
+     * @return array<string, RdfResource[]>
      */
-    private function createPropertiesMap(array $types): array
+    private function createPropertiesMap(array $graphs, array $types, array $config): array
     {
-        $typesAsString = [];
+        $typesResources = [];
         $map = [];
         foreach ($types as $type) {
             // get all parent classes until the root
-            $parentClasses = $this->getParentClasses($type);
-            $typesAsString[] = $parentClasses;
+            $parentClasses = $this->getParentClasses($graphs, $type);
+            $typesResources[] = [
+                'resources' => $parentClasses,
+                'uris' => array_map(static fn (RdfResource $parentClass) => $parentClass->getUri(), $parentClasses),
+                'names' => array_map(fn (RdfResource $parentClass) => $this->phpTypeConverter->escapeIdentifier($parentClass->localName()), $parentClasses),
+            ];
             $map[$type->getUri()] = [];
         }
 
-        foreach ($this->graphs as $graph) {
-            foreach ($graph->allOfType('rdf:Property') as $property) {
-                foreach ($property->all(self::SCHEMA_ORG_DOMAIN) as $domain) {
-                    foreach ($typesAsString as $typesAsStringItem) {
-                        if (\in_array($domain->getUri(), $typesAsStringItem, true)) {
-                            $map[$typesAsStringItem[0]][] = $property;
+        foreach ($graphs as $graph) {
+            foreach (self::$propertyTypes as $propertyType) {
+                /** @var RdfResource $property */
+                foreach ($graph->allOfType($propertyType) as $property) {
+                    if ($property->isBNode()) {
+                        continue;
+                    }
+
+                    foreach (self::$domainProperties as $domainPropertyType) {
+                        foreach ($property->all($domainPropertyType, 'resource') as $domain) {
+                            $this->addPropertyToMap($property, $domain, $typesResources, $config, $map);
                         }
                     }
                 }
@@ -587,376 +390,132 @@ class TypesGenerator
     }
 
     /**
-     * Is this type a datatype?
+     * @param array{resources: RdfResource[], uris: string[], names: string[]}[] $typesResources
+     * @param Configuration                $config
+     * @param array<string, RdfResource[]> $map
      */
-    private function isDatatype(string $type): bool
+    private function addPropertyToMap(RdfResource $property, RdfResource $domain, array $typesResources, array $config, array &$map): void
     {
-        return \in_array($type, ['Boolean', 'DataType', 'Date', 'DateTime', 'Float', 'Integer', 'Number', 'Text', 'Time', 'URL'], true);
-    }
+        $propertyName = $property->localName();
+        $deprecated = $property->isA('owl:DeprecatedProperty');
 
-    private function fieldToTypeHint(array $config, array $field, array $classes): ?string
-    {
-        if ($field['isArray']) {
-            return $config['doctrine']['useCollection'] ? 'Collection' : 'array';
+        if ($domain->isBNode()) {
+            if (null !== ($unionOf = $domain->get('owl:unionOf'))) {
+                $this->addPropertyToMap($property, $unionOf, $typesResources, $config, $map);
+
+                return;
+            }
+
+            if (null !== ($rdfFirst = $domain->get('rdf:first'))) {
+                $this->addPropertyToMap($property, $rdfFirst, $typesResources, $config, $map);
+                if (null !== ($rdfRest = $domain->get('rdf:rest'))) {
+                    $this->addPropertyToMap($property, $rdfRest, $typesResources, $config, $map);
+                }
+            }
+
+            return;
         }
 
-        return $this->fieldToAdderRemoverTypeHint($field, $classes);
-    }
+        foreach ($typesResources as $typesResourceHierarchy) {
+            foreach ($typesResourceHierarchy['uris'] as $k => $typeUri) {
+                if ($domain->getUri() !== $typeUri) {
+                    continue;
+                }
 
-    private function fieldToAdderRemoverTypeHint(array $field, array $classes): ?string
-    {
-        if ($field['isEnum']) {
-            return 'string';
+                $propertyConfig = $config['types'][$typesResourceHierarchy['names'][$k]]['properties'][$propertyName] ?? null;
+
+                if ($propertyConfig['exclude'] ?? false) {
+                    continue;
+                }
+
+                if ($deprecated) {
+                    if (null === $propertyConfig) {
+                        continue;
+                    }
+
+                    $this->logger ? $this->logger->warning('The property "{property}" of the type "{type}" is deprecated', ['property' => $property->getUri(), 'type' => $typeUri]) : null;
+                }
+
+                $map[$typeUri][] = $property;
+            }
         }
-
-        switch ($field['range']) {
-            case 'Mixed':
-                return 'mixed';
-            case 'Boolean':
-                return 'bool';
-            case 'Float':
-                return 'float';
-            case 'Integer':
-                return 'int';
-            case 'Text':
-            case 'URL':
-                return 'string';
-            case 'Date':
-            case 'DateTime':
-            case 'Time':
-                return '\\'.\DateTimeInterface::class;
-            case 'DataType':
-            case 'Number':
-                return null;
-        }
-
-        if(!isset($classes[$field['range']])) {
-            throw new \Exception("Couldn't find custom type " . $field['range']);
-        }
-
-        return $classes[$field['range']]['interfaceName'] ?? $classes[$field['range']]['name'];
     }
 
     /**
-     * Updates generated $class with given field config.
+     * @param RdfGraph[]    $graphs
+     * @param Configuration $config
      *
-     * @param string $typeName
-     * @param string $propertyName
-     *
-     * @return array $class
+     * @return array{0: string[], 1: array<string, RdfResource>}
      */
-    private function generateField(array $config, array $class, \EasyRdf_Resource $type, $typeName, $propertyName, \EasyRdf_Resource $property = null): array
+    private function defineTypesToGenerate(array $graphs, array $config): array
     {
-        $typeConfig = $config['types'][$typeName] ?? null;
-        $typesDefined = !empty($config['types']);
+        $typeNamesToGenerate = [];
+        $allTypes = [];
 
-        // Warn when property are not part of GoodRelations
-        if ($config['checkIsGoodRelations']) {
-            if (!$this->goodRelationsBridge->exist($propertyName)) {
-                $this->logger->warning(sprintf('The property "%s" (type "%s") is not part of GoodRelations.', $propertyName, $type->localName()));
+        foreach ($graphs as $graph) {
+            $vocabAllTypes = $config['vocabularies'][$graph->getUri()]['allTypes'] ?? $config['allTypes'];
+            foreach (self::$classTypes as $classType) {
+                foreach ($graph->allOfType($classType) as $type) {
+                    if ($type->isBNode()) {
+                        continue;
+                    }
+
+                    $typeName = $this->phpTypeConverter->escapeIdentifier($type->localName());
+                    if (!($config['types'][$typeName]['exclude'] ?? false)) {
+                        if ($config['resolveTypes'] || $vocabAllTypes) {
+                            $allTypes[$typeName] = $type;
+                        }
+                        if ($vocabAllTypes) {
+                            $typeNamesToGenerate[] = $typeName;
+                        }
+                    }
+                }
             }
         }
 
-        // Ignore or warn when properties are legacy
-        if (!empty($property) && preg_match('/legacy spelling/', (string) $property->get('rdfs:comment'))) {
-            if (isset($typeConfig['properties'])) {
-                $this->logger->warning(sprintf('The property "%s" (type "%s") is legacy.', $propertyName, $type->localName()));
+        foreach ($config['types'] as $typeName => $typeConfig) {
+            if ($typeConfig['exclude']) {
+                continue;
+            }
+            $vocabularyNamespace = $typeConfig['vocabularyNamespace'] ?? $config['vocabularyNamespace'];
+
+            $resource = null;
+            foreach ($graphs as $graph) {
+                $resources = $graph->resources();
+
+                $typeIri = $vocabularyNamespace.$typeName;
+                if (isset($resources[$typeIri])) {
+                    $resource = $graph->resource($typeIri);
+                    break;
+                }
+            }
+
+            $typeName = $this->phpTypeConverter->escapeIdentifier($typeName);
+            if ($resource) {
+                $allTypes[$typeName] = $resource;
+                if (!\in_array($typeName, $typeNamesToGenerate, true)) {
+                    $typeNamesToGenerate[] = $typeName;
+                }
             } else {
-                $this->logger->info(sprintf('The property "%s" (type "%s") is legacy. Ignoring.', $propertyName, $type->localName()));
-
-                return $class;
-            }
-        }
-
-        $propertyConfig = $typeConfig['properties'][$propertyName] ?? null;
-
-        $ranges = [];
-        if (isset($propertyConfig['range']) && $propertyConfig['range']) {
-            $ranges[] = $propertyConfig['range'];
-        } elseif (!empty($property)) {
-            foreach ($property->all(self::SCHEMA_ORG_RANGE) as $range) {
-                if (!$typesDefined || $this->isDatatype($range->localName()) || isset($config['types'][$range->localName()])) {
-                    $ranges[] = $range->localName();
+                $this->logger ? $this->logger->warning('Type "{typeName}" cannot be found. Using "{guessFrom}" type to generate entity.', ['typeName' => $typeName, 'guessFrom' => $typeConfig['guessFrom']]) : null;
+                if (isset($graph)) {
+                    $type = $graph->resource($vocabularyNamespace.$typeConfig['guessFrom']);
+                    $allTypes[$typeName] = $type;
+                    if (!\in_array($typeName, $typeNamesToGenerate, true)) {
+                        $typeNamesToGenerate[] = $typeName;
+                    }
                 }
             }
         }
 
-        $numberOfRanges = \count($ranges);
-        if (0 === $numberOfRanges) {
-            $this->logger->error(sprintf('The property "%s" (type "%s") has an unknown type. Add its type to the config file.', $propertyName, $type->localName()));
-        } else {
-            if ($numberOfRanges > 1) {
-                $this->logger->warning(sprintf('The property "%s" (type "%s") has several types. Using the first one ("%s") or possible options("%s").', $propertyName, $type->localName(), reset($ranges), implode('", "', $ranges)));
-            }
-
-            $cardinality = $propertyConfig['cardinality'] ?? false;
-            if (!$cardinality || CardinalitiesExtractor::CARDINALITY_UNKNOWN === $cardinality) {
-                $cardinality = $property ? $this->cardinalities[$propertyName] : CardinalitiesExtractor::CARDINALITY_1_1;
-            }
-
-            $isArray = \in_array($cardinality, [
-                CardinalitiesExtractor::CARDINALITY_0_N,
-                CardinalitiesExtractor::CARDINALITY_1_N,
-                CardinalitiesExtractor::CARDINALITY_N_N,
-            ], true);
-
-            if (isset($propertyConfig['nullable'])) {
-                $isNullable = (bool) $propertyConfig['nullable'];
-            } else {
-                $isNullable = !\in_array($cardinality, [
-                    CardinalitiesExtractor::CARDINALITY_1_1,
-                    CardinalitiesExtractor::CARDINALITY_1_N,
-                ], true);
-            }
-
-            $columnPrefix = false;
-            $isEmbedded = $propertyConfig['embedded'] ?? false;
-
-            if (true === $isEmbedded) {
-                $columnPrefix = $propertyConfig['columnPrefix'] ?? false;
-            }
-
-            $formattedPropertyName = $propertyName;
-            if(!isset($propertyConfig['formatName']) || $propertyConfig['formatName']) {
-                $formattedPropertyName = $this->getFieldName($propertyName, $isArray);
-            }
-
-            $class['fields'][$propertyName] = [
-                'name' => $formattedPropertyName,
-                'resource' => $property,
-                'range' => $ranges[0],
-                'cardinality' => $cardinality,
-                'ormColumn' => $propertyConfig['ormColumn'] ?? null,
-                'orm' => $propertyConfig['orm'] ?? null,
-                'isArray' => $isArray,
-                'isReadable' => $propertyConfig['readable'] ?? true,
-                'isWritable' => $propertyConfig['writable'] ?? true,
-                'isNullable' => $isNullable,
-                'isUnique' => isset($propertyConfig['unique']) && $propertyConfig['unique'],
-                'isCustom' => empty($property),
-                'isEmbedded' => $isEmbedded,
-                'columnPrefix' => $columnPrefix,
-                'mappedBy' => $propertyConfig['mappedBy'] ?? null,
-                'inversedBy' => $propertyConfig['inversedBy'] ?? null,
-                'isId' => false,
-            ];
-
-            if ($isArray) {
-                $class['hasConstructor'] = true;
-
-                if ($config['doctrine']['useCollection'] && !\in_array(ArrayCollection::class, $class['uses'], true)) {
-                    $class['uses'][] = ArrayCollection::class;
-                    $class['uses'][] = Collection::class;
-                }
-            }
-        }
-
-        return $class;
+        return [$typeNamesToGenerate, $allTypes];
     }
 
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateFieldAnnotations(array $annotationGenerators, string $className, string $fieldName): array
+    public function setLogger(LoggerInterface $logger): void
     {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateFieldAnnotations($className, $fieldName));
+        $this->logger = $logger;
+        if (method_exists($this->propertyGenerator, 'setLogger')) {
+            $this->propertyGenerator->setLogger($logger);
         }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateConstantAnnotations(array $annotationGenerators, string $className, string $constantName): array
-    {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateConstantAnnotations($className, $constantName));
-        }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateClassAnnotations(array $annotationGenerators, string $className): array
-    {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateClassAnnotations($className));
-        }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateInterfaceAnnotations(array $annotationGenerators, string $className): array
-    {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateInterfaceAnnotations($className));
-        }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateGetterAnnotations(array $annotationGenerators, string $className, string $fieldName): array
-    {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateGetterAnnotations($className, $fieldName));
-        }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateAdderAnnotations(array $annotationGenerators, string $className, string $fieldName): array
-    {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateAdderAnnotations($className, $fieldName));
-        }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateRemoverAnnotations(array $annotationGenerators, string $className, string $fieldName): array
-    {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateRemoverAnnotations($className, $fieldName));
-        }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateSetterAnnotations(array $annotationGenerators, string $className, string $fieldName): array
-    {
-        $annotations = [];
-        foreach ($annotationGenerators as $generator) {
-            $annotations = array_merge($annotations, $generator->generateSetterAnnotations($className, $fieldName));
-        }
-
-        return $annotations;
-    }
-
-    /**
-     * @param AnnotationGeneratorInterface[] $annotationGenerators
-     */
-    private function generateClassUses(array $annotationGenerators, array $classes, string $className): array
-    {
-        $uses = $classes[$className]['uses'];
-
-        if (isset($classes[$className]['interfaceNamespace'])
-            && $classes[$className]['interfaceNamespace'] !== $classes[$className]['namespace']
-        ) {
-            $uses[] = sprintf(
-                '%s\\%s',
-                $classes[$className]['interfaceNamespace'],
-                $classes[$className]['interfaceName']
-            );
-        }
-
-        foreach ($classes[$className]['fields'] as $field) {
-            if (isset($classes[$field['range']]['interfaceName'])) {
-                $use = sprintf(
-                    '%s\\%s',
-                    $classes[$field['range']]['interfaceNamespace'],
-                    $classes[$field['range']]['interfaceName']
-                );
-
-                if (!\in_array($use, $uses, true)) {
-                    $uses[] = $use;
-                }
-            }
-        }
-
-        foreach ($annotationGenerators as $generator) {
-            $uses = array_merge($uses, $generator->generateUses($className));
-        }
-
-        // Order alphabetically
-        sort($uses);
-
-        return $uses;
-    }
-
-    /**
-     * Converts a namespace to a directory path according to PSR-4.
-     */
-    private function namespaceToDir(array $config, string $namespace): string
-    {
-        //$namespace = trim($namespace, "\\/");
-
-        if (null !== ($prefix = $config['namespaces']['prefix'] ?? null) && 0 === strpos($namespace, $prefix)) {
-            $namespace = substr($namespace, \strlen($prefix));
-        }
-
-        return sprintf('%s/%s/', $config['output'], strtr($namespace, '\\', '/'));
-    }
-
-    /**
-     * Uses PHP CS Fixer to make generated files following PSR and Symfony Coding Standards.
-     */
-    private function fixCs(array $files): void
-    {
-        $fileInfos = [];
-        foreach ($files as $file) {
-            $fileInfos[] = new \SplFileInfo($file);
-        }
-
-        $fixers = (new FixerFactory())
-            ->registerBuiltInFixers()
-            ->useRuleSet(new RuleSet([
-                '@Symfony' => true,
-                'array_syntax' => ['syntax' => 'short'],
-                'phpdoc_order' => true,
-                'declare_strict_types' => true,
-            ]))
-            ->getFixers();
-
-        $runner = new Runner(
-            new \ArrayIterator($fileInfos),
-            $fixers,
-            new NullDiffer(),
-            null,
-            new ErrorsManager(),
-            new Linter(),
-            false,
-            new NullCacheManager()
-        );
-        $runner->fix();
-    }
-
-    private function getFieldName(string $propertyName, bool $isArray): string
-    {
-        $snakeProperty = preg_replace('/([A-Z])/', '_$1', $propertyName);
-        $exploded = explode('_', $snakeProperty);
-
-        if (2 < \strlen($word = $exploded[\count($exploded) - 1])) {
-            $exploded[\count($exploded) - 1] = $isArray ? Inflector::pluralize($word) : Inflector::singularize($word);
-
-            return implode('', $exploded);
-        }
-
-        return $propertyName;
     }
 }

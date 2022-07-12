@@ -26,9 +26,10 @@ class GoodRelationsBridge
     /**
      * @var \SimpleXMLElement[]
      */
-    private $relations;
+    private array $relations;
 
-    private $objectPropertiesTable = [
+    /** @var array<string, string> */
+    private array $objectPropertiesTable = [
         'priceSpecification' => 'hasPriceSpecification',
         'businessFunction' => 'hasBusinessFunction',
         'eligibleCustomerType' => 'eligibleCustomerTypes',
@@ -46,7 +47,8 @@ class GoodRelationsBridge
         'acceptedPaymentMethod' => 'acceptedPaymentMethods',
     ];
 
-    private $datatypePropertiesTable = [
+    /** @var array<string, string> */
+    private array $datatypePropertiesTable = [
         'minPrice' => 'hasMinCurrencyValue',
         'unitCode' => 'hasUnitOfMeasurement',
         'isicV4' => 'hasISICv4',
@@ -82,7 +84,7 @@ class GoodRelationsBridge
     /**
      * Checks if a property exists in GoodRelations.
      */
-    public function exist(string $id): bool
+    public function exists(string $id): bool
     {
         foreach ($this->relations as $relation) {
             $result = $relation->xpath(sprintf('//*[@rdf:about="%s"]', $this->getPropertyUrl($id)));
@@ -97,17 +99,23 @@ class GoodRelationsBridge
     /**
      * Extracts cardinality from the Good Relations OWL.
      *
-     * @return string|bool
+     * @return string|false
      */
     public function extractCardinality(string $id)
     {
         foreach ($this->relations as $relation) {
             $result = $relation->xpath(sprintf('//*[@rdf:about="%s"]/rdfs:label', $this->getPropertyUrl($id)));
-            if (\count($result)) {
-                preg_match('/\(.\.\..\)/', $result[0]->asXML(), $matches);
-
-                return $matches[0];
+            if (!$result) {
+                continue;
             }
+
+            $xmlResult = $result[0]->asXML();
+            if (false === $xmlResult) {
+                continue;
+            }
+            preg_match('/\(.\.\..\)/', $xmlResult, $matches);
+
+            return $matches[0];
         }
 
         return false;

@@ -1,7 +1,78 @@
 parameters:
+    level: 8
+    paths:
+        - src
+    typeAliases:
+        PropertyConfiguration: '''
+            array{
+                exclude: boolean,
+                range: ?string,
+                cardinality: string,
+                groups: string[],
+                mappedBy: ?string,
+                inversedBy: ?string,
+                readable: boolean,
+                writable: boolean,
+                nullable: boolean,
+                required: ?boolean,
+                unique: boolean,
+                embedded: boolean,
+                attributes: array<string, (int|bool|null|string|string[]|string[][]|\Nette\PhpGenerator\Literal)[]|null>
+            }
+        '''
+        TypeConfiguration: '''
+            array{
+                exclude: boolean,
+                vocabularyNamespace: ?string,
+                abstract: ?boolean,
+                embeddable: boolean,
+                namespaces: array{class: ?string, interface: ?string},
+                attributes: array<string, (int|bool|null|string|string[]|string[][]|\Nette\PhpGenerator\Literal)[]|null>,
+                parent: false|string,
+                guessFrom: string,
+                operations: array<string, ?array<string, string|int|bool|string[]|null>>,
+                allProperties: boolean,
+                properties: array<string, PropertyConfiguration>
+            }
+        '''
+        Configuration: '''
+            array{
+                 vocabularies: array{uri: string, format: string, allTypes: ?boolean, attributes: array<string, (int|bool|null|string|string[]|string[][]|\Nette\PhpGenerator\Literal)[]|null>}[],
+                 vocabularyNamespace: string,
+                 relations: array{uris: string[], defaultCardinality: string},
+                 debug: boolean,
+                 apiPlatformOldAttributes: boolean,
+                 id: array{generate: boolean, generationStrategy: string, writable: boolean},
+                 useInterface: boolean,
+                 checkIsGoodRelations: boolean,
+                 header: ?string,
+                 namespaces: array{prefix: ?string, entity: string, enum: string, interface: string},
+                 uses: array<string, array{alias: ?string}>,
+                 doctrine: array{
+                     useCollection: boolean,
+                     resolveTargetEntityConfigPath: ?string,
+                     resolveTargetEntityConfigType: 'XML'|'yaml',
+                     inheritanceAttributes: array<string, (int|bool|null|string|string[]|string[][]|\Nette\PhpGenerator\Literal)[]>,
+                     inheritanceType: 'JOINED'|'SINGLE_TABLE'|'SINGLE_COLLECTION'|'TABLE_PER_CLASS'|'COLLECTION_PER_CLASS'|'NONE',
+                     maxIdentifierLength: integer
+                 },
+                 validator: array{assertType: boolean},
+                 author: false|string,
+                 fieldVisibility: string,
+                 accessorMethods: boolean,
+                 fluentMutatorMethods: boolean,
+                 rangeMapping: array<string, string>,
+                 allTypes: boolean,
+                 resolveTypes: boolean,
+                 types: array<string, TypeConfiguration>,
+                 annotationGenerators: class-string<ApiPlatform\SchemaGenerator\AnnotationGenerator\AnnotationGeneratorInterface>[],
+                 attributeGenerators: class-string<ApiPlatform\SchemaGenerator\AttributeGenerator\AttributeGeneratorInterface>[],
+                 generatorTemplates: string[],
+                 output: string,
+                 openApi: array{file: string}
+            }
+        '''
     inferPrivatePropertyTypeFromConstructor: true
     ignoreErrors:
-    # BC layer
-    - '#Call to function method_exists\(\).*getRootNode. will always evaluate to false\.#'
-    - '#Class Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder constructor invoked with 0 parameters, 1-3 required\.#'
-    - '#Call to an undefined method Symfony\\Component\\Config\\Definition\\Builder\\TreeBuilder::root\(\)\.#'
+    # False positive
+    - '#Call to an undefined method Symfony\\Component\\Config\\Definition\\Builder\\NodeDefinition::children\(\)\.#'

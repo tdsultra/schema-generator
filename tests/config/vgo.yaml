@@ -1,12 +1,16 @@
-rdfa: [tests/data/vgo.rdf, data/schema.rdfa]
+vocabularies:
+  - tests/data/vgo.rdf
+  - uri: tests/data/schema.rdf
+    format: rdf
 
 annotationGenerators:
   - ApiPlatform\SchemaGenerator\AnnotationGenerator\PhpDocAnnotationGenerator
-  - ApiPlatform\SchemaGenerator\AnnotationGenerator\DoctrineOrmAnnotationGenerator
-  - ApiPlatform\SchemaGenerator\AnnotationGenerator\ConstraintAnnotationGenerator
+attributeGenerators:
+  - ApiPlatform\SchemaGenerator\AttributeGenerator\DoctrineOrmAttributeGenerator
+  - ApiPlatform\SchemaGenerator\AttributeGenerator\ConstraintAttributeGenerator
 
 namespaces:
-  entity: 'AppBundle\Entity'
+  entity: 'App\Entity'
 
 types:
   Session:

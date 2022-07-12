@@ -13,9 +13,12 @@ declare(strict_types=1);
 
 namespace ApiPlatform\SchemaGenerator\AnnotationGenerator;
 
-use Doctrine\Common\Inflector\Inflector;
+use ApiPlatform\SchemaGenerator\Model\Class_;
+use ApiPlatform\SchemaGenerator\Model\Constant;
+use ApiPlatform\SchemaGenerator\Model\Property;
+use ApiPlatform\SchemaGenerator\PhpTypeConverterInterface;
 use League\HTMLToMarkdown\HtmlConverter;
-use Psr\Log\LoggerInterface;
+use Symfony\Component\String\Inflector\InflectorInterface;
 
 /**
  * PHPDoc annotation generator.
@@ -26,17 +29,14 @@ final class PhpDocAnnotationGenerator extends AbstractAnnotationGenerator
 {
     private const INDENT = '   ';
 
-    /**
-     * @var HtmlConverter
-     */
-    private $htmlToMarkdown;
+    private HtmlConverter $htmlToMarkdown;
 
     /**
      * {@inheritdoc}
      */
-    public function __construct(LoggerInterface $logger, array $graphs, array $cardinalities, array $config, array $classes)
+    public function __construct(PhpTypeConverterInterface $phpTypeConverter, InflectorInterface $inflector, array $config, array $classes)
     {
-        parent::__construct($logger, $graphs, $cardinalities, $config, $classes);
+        parent::__construct($phpTypeConverter, $inflector, $config, $classes);
 
         $this->htmlToMarkdown = new HtmlConverter();
     }
@@ -44,28 +44,26 @@ final class PhpDocAnnotationGenerator extends AbstractAnnotationGenerator
     /**
      * {@inheritdoc}
      */
-    public function generateClassAnnotations(string $className): array
+    public function generateClassAnnotations(Class_ $class): array
     {
-        return $this->generateDoc($className);
+        return $this->generateDoc($class);
     }
 
     /**
      * {@inheritdoc}
      */
-    public function generateInterfaceAnnotations(string $className): array
+    public function generateInterfaceAnnotations(Class_ $class): array
     {
-        return $this->generateDoc($className, true);
+        return $this->generateDoc($class, true);
     }
 
     /**
      * {@inheritdoc}
      */
-    public function generateConstantAnnotations(string $className, string $constantName): array
+    public function generateConstantAnnotations(Constant $constant): array
     {
-        $resource = $this->classes[$className]['constants'][$constantName]['resource'];
-
-        $annotations = $this->formatDoc((string) $resource->get('rdfs:comment'), true);
-        $annotations[0] = sprintf('@var string %s', $annotations[0]);
+        $annotations = $this->formatDoc($constant->comment(), true);
+        $annotations[0] = sprintf('@var string %s', $this->escapePhpDoc($annotations[0]));
 
         return $annotations;
     }
@@ -73,14 +71,22 @@ final class PhpDocAnnotationGenerator extends AbstractAnnotationGenerator
     /**
      * {@inheritdoc}
      */
-    public function generateFieldAnnotations(string $className, string $fieldName): array
+    public function generatePropertyAnnotations(Property $property, string $className): array
     {
-        $field = $this->classes[$className]['fields'][$fieldName];
-        $comment = $field['resource'] ? $field['resource']->get('rdfs:comment') : '';
+        $description = $this->formatDoc((string) $property->description(), true);
 
-        $annotations = $this->formatDoc((string) $comment, true);
+        $annotations = [];
+        if ($this->isDocUseful($property) && $phpDocType = $this->toPhpDocType($property)) {
+            $annotations[] = sprintf('@var %s %s', $phpDocType, $this->escapePhpDoc($description[0]));
+        } else {
+            $annotations = $description;
+            $annotations[] = '';
+        }
 
-        $annotations[0] = sprintf('@var %s %s', $this->toPhpDocType($field), $annotations[0]);
+        if (null !== $property->rdfType()) {
+            $annotations[] = sprintf('@see %s', $property->rdfType());
+        }
+
         $annotations[] = '';
 
         return $annotations;
@@ -89,75 +95,78 @@ final class PhpDocAnnotationGenerator extends AbstractAnnotationGenerator
     /**
      * {@inheritdoc}
      */
-    public function generateGetterAnnotations(string $className, string $fieldName): array
+    public function generateGetterAnnotations(Property $property): array
     {
-        if (!$this->isDocUseful($className, $fieldName)) {
+        if (!$this->isDocUseful($property)) {
             return [];
         }
 
-        return [sprintf('@return %s', $this->toPhpDocType($this->classes[$className]['fields'][$fieldName]))];
+        return [sprintf('@return %s', $this->toPhpDocType($property))];
     }
 
     /**
      * {@inheritdoc}
      */
-    public function generateSetterAnnotations(string $className, string $fieldName): array
+    public function generateSetterAnnotations(Property $property): array
     {
-        if (!$this->isDocUseful($className, $fieldName)) {
+        if (!$this->isDocUseful($property)) {
             return [];
         }
 
-        $field = $this->classes[$className]['fields'][$fieldName];
-
-        return [sprintf('@param %s $%s', $this->toPhpDocType($this->classes[$className]['fields'][$fieldName]), $field['name'])];
+        return [sprintf('@param %s $%s', $this->toPhpDocType($property), $property->name())];
     }
 
     /**
      * {@inheritdoc}
      */
-    public function generateAdderAnnotations(string $className, string $fieldName): array
+    public function generateAdderAnnotations(Property $property): array
     {
-        if (!$this->isDocUseful($className, $fieldName, true)) {
+        if (!$this->isDocUseful($property, true)) {
             return [];
         }
 
-        return [sprintf('@param %s $%s', $this->toPhpType($this->classes[$className]['fields'][$fieldName], true), Inflector::singularize($fieldName))];
+        return [sprintf('@param %s $%s', $this->toPhpDocType($property, true), $this->inflector->singularize($property->name())[0])];
     }
 
     /**
      * {@inheritdoc}
      */
-    public function generateRemoverAnnotations(string $className, string $fieldName): array
+    public function generateRemoverAnnotations(Property $property): array
     {
-        if (!$this->isDocUseful($className, $fieldName, true)) {
+        if (!$this->isDocUseful($property, true)) {
             return [];
         }
 
-        return [sprintf('@param  %s $%s', $this->toPhpType($this->classes[$className]['fields'][$fieldName], true), Inflector::singularize($fieldName))];
+        return [sprintf('@param %s $%s', $this->toPhpDocType($property, true), $this->inflector->singularize($property->name())[0])];
     }
 
-    private function isDocUseful(string $className, string $fieldName, $adderOrRemover = false): bool
+    private function isDocUseful(Property $property, bool $adderOrRemover = false): bool
     {
-        $typeHint = $this->classes[$className]['fields'][$fieldName][$adderOrRemover ? 'adderRemoverTypeHint' : 'typeHint'] ?? false;
+        $typeHint = $adderOrRemover ? $property->adderRemoverTypeHint : $property->typeHint;
 
-        return false === $typeHint || 'array' === $typeHint;
+        return \in_array($typeHint, [false, 'array', 'Collection'], true);
     }
 
     /**
      * Generates class or interface PHPDoc.
+     *
+     * @return string[]
      */
-    private function generateDoc(string $className, bool $interface = false): array
+    private function generateDoc(Class_ $class, bool $interface = false): array
     {
-        $resource = $this->classes[$className]['resource'];
         $annotations = [];
 
-        if (!$interface && isset($this->classes[$className]['interfaceName'])) {
+        if (!$interface && null !== $class->interfaceName()) {
             $annotations[] = '{@inheritdoc}';
             $annotations[] = '';
         } else {
-            $annotations = $this->formatDoc((string) $resource->get('rdfs:comment'));
-            $annotations[] = '';
-            $annotations[] = sprintf('@see %s %s', $resource->getUri(), 'Documentation on Schema.org');
+            if ($class->description()) {
+                $annotations = $this->formatDoc($class->description());
+                $annotations[] = '';
+            }
+            if ($class->rdfType()) {
+                $annotations[] = sprintf('@see %s', $class->rdfType());
+            }
         }
 
         if ($this->config['author']) {
@@ -169,10 +178,12 @@ final class PhpDocAnnotationGenerator extends AbstractAnnotationGenerator
 
     /**
      * Converts HTML to Markdown and explode.
+     *
+     * @return string[]
      */
     private function formatDoc(string $doc, bool $indent = false): array
     {
-        $doc = explode("\n", $this->htmlToMarkdown->convert($doc));
+        $doc = explode("\n", $this->escapePhpDoc($this->htmlToMarkdown->convert($doc)));
 
         if ($indent) {
             $count = \count($doc);
@@ -184,13 +195,42 @@ final class PhpDocAnnotationGenerator extends AbstractAnnotationGenerator
         return $doc;
     }
 
-    private function toPhpDocType(array $field): string
+    protected function toPhpDocType(Property $property, bool $adderOrRemover = false): ?string
     {
-        $type = $this->toPhpType($field);
-        if ($field['isNullable']) {
-            $type .= '|null';
+        $suffix = $property->isNullable ? '|null' : '';
+        if ($property->isEnum) {
+            if ($property->isArray) {
+                return 'string[]'.$suffix;
+            }
+
+            return 'string'.$suffix;
         }
 
-        return $type;
+        $enforcedNonArrayProperty = clone $property;
+        $enforcedNonArrayProperty->isArray = false;
+
+        if (!$property->reference && null !== $phpDocType = $this->phpTypeConverter->getPhpType($enforcedNonArrayProperty)) {
+            return ($property->isArray ? sprintf('%s[]', $phpDocType) : $phpDocType).$suffix;
+        }
+
+        if (!$property->reference) {
+            return null;
+        }
+
+        $phpDocType = $property->reference->interfaceName() ?: $property->reference->name();
+        if (!$property->isArray || $adderOrRemover) {
+            return $phpDocType.$suffix;
+        }
+
+        if ($this->config['doctrine']['useCollection']) {
+            return sprintf('Collection<%s>%s', $phpDocType, $suffix);
+        }
+
+        return sprintf('%s[]%s', $phpDocType, $suffix);
+    }
+
+    private function escapePhpDoc(string $text): string
+    {
+        return str_replace('@', '\\@', $text);
     }
 }

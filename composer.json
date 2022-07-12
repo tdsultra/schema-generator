@@ -2,8 +2,18 @@
     "name": "api-platform/schema-generator",
     "type": "library",
     "description": "Various tools to generate a data model based on Schema.org vocables",
-    "keywords": ["schema.org", "semantic", "model", "doctrine", "symfony", "entity", "enum"],
-    "homepage": "https://api-platform.com",
+    "keywords": [
+        "rdf",
+        "owl",
+        "schema.org",
+        "semantic",
+        "model",
+        "doctrine",
+        "symfony",
+        "entity",
+        "enum"
+    ],
+    "homepage": "https://api-platform.com/docs/schema-generator/",
     "license": "MIT",
     "authors": [
         {
@@ -12,34 +22,52 @@
         }
     ],
     "autoload": {
-        "psr-4": { "ApiPlatform\\SchemaGenerator\\": "src/" }
+        "psr-4": {
+            "ApiPlatform\\SchemaGenerator\\": "src/"
+        }
     },
     "autoload-dev": {
-        "psr-4": { "ApiPlatform\\SchemaGenerator\\Tests\\": "tests/" }
+        "psr-4": {
+            "ApiPlatform\\SchemaGenerator\\Tests\\": "tests/"
+        }
     },
     "require": {
-        "php": ">=7.1",
-        "doctrine/inflector": "^1.0 || ^2.0",
-        "easyrdf/easyrdf": "^0.9",
+        "php": ">=7.4",
         "ext-json": "*",
+        "doctrine/inflector": "^1.4.3 || ^2.0",
+        "easyrdf/easyrdf": "^1.1",
         "friendsofphp/php-cs-fixer": "^2.15 || ^3.0",
-        "league/html-to-markdown": "^4.0",
+        "league/html-to-markdown": "^5.0",
         "psr/log": "^1.0 || ^2.0 || ^3.0",
-        "symfony/config": "^3.3 || ^4.0 || ^5.0 || ^6.0",
-        "symfony/console": "^2.7 || ^3.0 || ^4.0 || ^5.0 || ^6.0",
-        "symfony/yaml": "^2.7 || ^3.0 || ^4.0 || ^5. || ^6.00",
-        "twig/twig": "^1.35 || ^2.0 || ^3.0"
+        "symfony/config": "^5.2 || ^6.0" ,
+        "symfony/console": "^5.2 || ^6.0",
+        "symfony/yaml": "^5.2 || ^6.0",
+        "symfony/filesystem": "^5.2 || ^6.0",
+        "twig/twig": "^3.0",
+        "nette/php-generator": "^3.6 || ^4.0",
+        "nette/utils": "^3.1 || ^4.0-dev",
+        "nikic/php-parser": "^4.13",
+        "cebe/php-openapi": "^1.6",
+        "symfony/string": "^5.2 || ^6.0"
     },
     "require-dev": {
-        "api-platform/core": "^2.0",
-        "doctrine/orm": "^2.2",
-        "myclabs/php-enum": "^1.0",
-        "symfony/doctrine-bridge": "^2.7 || ^3.0 || ^4.0 || ^5.0 || ^6.0",
-        "symfony/filesystem": "^2.7 || ^3.0 || ^4.0 || ^5.0 || ^6.0",
-        "symfony/phpunit-bridge": "^4.3 || ^5.0",
-        "symfony/serializer": "^2.7 || ^3.0 || ^4.0 || ^5.0 || ^6.0",
-        "symfony/validator": "^2.7 || ^3.0 || ^4.0 || ^5.0 || ^6.0"
+        "api-platform/core": "^v2.7.0-beta.1",
+        "doctrine/orm": "^2.7",
+        "myclabs/php-enum": "^1.7",
+        "symfony/doctrine-bridge": "^5.2 || ^6.0",
+        "symfony/phpunit-bridge": "^5.2 || ^6.0",
+        "symfony/serializer": "^5.2 || ^6.0",
+        "symfony/validator": "^5.2 || ^6.0",
+        "phpspec/prophecy-phpunit": "^2.0",
+        "phpstan/phpstan": "^1.2.0",
+        "symfony/finder": "^5.2 || ^6.0"
     },
-    "bin": ["bin/schema"],
-    "minimum-stability": "dev"
+    "bin": [
+        "bin/schema"
+    ],
+    "config": {
+        "allow-plugins": {
+            "composer/package-versions-deprecated": true
+        }
+    }
 }

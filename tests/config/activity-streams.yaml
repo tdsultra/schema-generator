@@ -1,0 +1,13 @@
+vocabularies:
+    - { uri: tests/data/activitystreams2.owl, attributes: { ApiResource: { routePrefix: 'as' } } }
+vocabularyNamespace: http://www.w3.org/ns/activitystreams#
+allTypes: true
+types:
+    Delete:
+        exclude: true
+    Place:
+        allProperties: true
+        properties:
+            units: { range: 'http://www.w3.org/2001/XMLSchema#string' }
+    Travel:
+        exclude: true

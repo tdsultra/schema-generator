@@ -13,7 +13,12 @@ declare(strict_types=1);
 
 namespace ApiPlatform\SchemaGenerator\AnnotationGenerator;
 
-use Psr\Log\LoggerInterface;
+use ApiPlatform\SchemaGenerator\Model\Class_;
+use ApiPlatform\SchemaGenerator\Model\Constant;
+use ApiPlatform\SchemaGenerator\Model\Property;
+use ApiPlatform\SchemaGenerator\PhpTypeConverterInterface;
+use Psr\Log\LoggerAwareTrait;
+use Symfony\Component\String\Inflector\InflectorInterface;
 
 /**
  * Abstract annotation generator.
@@ -22,39 +27,23 @@ use Psr\Log\LoggerInterface;
  */
 abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterface
 {
-    /**
-     * @var LoggerInterface
-     */
-    protected $logger;
+    use LoggerAwareTrait;
+
+    protected PhpTypeConverterInterface $phpTypeConverter;
+    protected InflectorInterface $inflector;
+    /** @var Configuration */
+    protected array $config;
+    /** @var Class_[] */
+    protected array $classes;
 
     /**
-     * @var \EasyRdf_Graph[]
+     * @param Configuration $config
+     * @param Class_[]      $classes
      */
-    protected $graphs;
-
-    /**
-     * @var array
-     */
-    protected $cardinalities;
-
-    /**
-     * @var array
-     */
-    protected $config;
-
-    /**
-     * @var array
-     */
-    protected $classes;
-
-    /**
-     * {@inheritdoc}
-     */
-    public function __construct(LoggerInterface $logger, array $graphs, array $cardinalities, array $config, array $classes)
+    public function __construct(PhpTypeConverterInterface $phpTypeConverter, InflectorInterface $inflector, array $config, array $classes)
     {
-        $this->logger = $logger;
-        $this->graphs = $graphs;
-        $this->cardinalities = $cardinalities;
+        $this->phpTypeConverter = $phpTypeConverter;
+        $this->inflector = $inflector;
         $this->config = $config;
         $this->classes = $classes;
     }
@@ -62,7 +51,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateClassAnnotations(string $className): array
+    public function generateClassAnnotations(Class_ $class): array
     {
         return [];
     }
@@ -70,7 +59,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateInterfaceAnnotations(string $className): array
+    public function generateInterfaceAnnotations(Class_ $class): array
     {
         return [];
     }
@@ -78,7 +67,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateConstantAnnotations(string $className, string $constantName): array
+    public function generateConstantAnnotations(Constant $constant): array
     {
         return [];
     }
@@ -86,7 +75,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateFieldAnnotations(string $className, string $fieldName): array
+    public function generatePropertyAnnotations(Property $property, string $className): array
     {
         return [];
     }
@@ -94,7 +83,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateGetterAnnotations(string $className, string $fieldName): array
+    public function generateGetterAnnotations(Property $property): array
     {
         return [];
     }
@@ -102,7 +91,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateSetterAnnotations(string $className, string $fieldName): array
+    public function generateSetterAnnotations(Property $property): array
     {
         return [];
     }
@@ -110,7 +99,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateAdderAnnotations(string $className, string $fieldName): array
+    public function generateAdderAnnotations(Property $property): array
     {
         return [];
     }
@@ -118,7 +107,7 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateRemoverAnnotations(string $className, string $fieldName): array
+    public function generateRemoverAnnotations(Property $property): array
     {
         return [];
     }
@@ -126,69 +115,8 @@ abstract class AbstractAnnotationGenerator implements AnnotationGeneratorInterfa
     /**
      * {@inheritdoc}
      */
-    public function generateUses(string $className): array
+    public function generateUses(Class_ $class): array
     {
         return [];
-    }
-
-    /**
-     * Converts a Schema.org range to a PHP type.
-     */
-    protected function toPhpType(array $field, bool $adderOrRemover = false): string
-    {
-        $range = $field['range'];
-
-        if ($field['isEnum']) {
-            if ($field['isArray']) {
-                return 'string[]';
-            }
-
-            return 'string';
-        }
-
-        $data = false;
-        switch ($range) {
-            case 'Boolean':
-                $data = 'bool';
-                break;
-            case 'Date':
-            case 'DateTime':
-            case 'Time':
-                $data = '\\'.\DateTimeInterface::class;
-                break;
-            case 'Number':
-            case 'Float':
-                $data = 'float';
-                break;
-            case 'Integer':
-                $data = 'integer';
-                break;
-            case 'Text':
-            case 'URL':
-                $data = 'string';
-                break;
-        }
-
-        if (false !== $data) {
-            if ($field['isArray']) {
-                return sprintf('%s[]', $data);
-            }
-
-            return $data;
-        }
-
-        if (isset($this->classes[$field['range']]['interfaceName'])) {
-            $range = $this->classes[$field['range']]['interfaceName'];
-        }
-
-        if ($field['isArray'] && !$adderOrRemover) {
-            if ($this->config['doctrine']['useCollection']) {
-                return sprintf('Collection<%s>', $range);
-            }
-
-            return sprintf('%s[]', $range);
-        }
-
-        return $range;
     }
 }

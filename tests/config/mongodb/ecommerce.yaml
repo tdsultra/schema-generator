@@ -13,8 +13,9 @@ namespaces:
   interface: 'Dunglas\EcommerceBundle\Model'
 annotationGenerators:
   - ApiPlatform\SchemaGenerator\AnnotationGenerator\PhpDocAnnotationGenerator
-  - ApiPlatform\SchemaGenerator\AnnotationGenerator\ConstraintAnnotationGenerator
-  - ApiPlatform\SchemaGenerator\AnnotationGenerator\DoctrineMongoDBAnnotationGenerator
+attributeGenerators:
+  - ApiPlatform\SchemaGenerator\AttributeGenerator\ConstraintAttributeGenerator
+  - ApiPlatform\SchemaGenerator\AttributeGenerator\DoctrineMongoDBAttributeGenerator
 author: 'Kévin Dunglas <dunglas@gmail.com>'
 debug: true
 useInterface: true
@@ -26,7 +27,7 @@ types:
     properties:
       name: ~
       description: ~
-      image: { range: ImageObject }
+      image: { range: https://schema.org/ImageObject }
       additionalType: ~
   Product:
     properties:
@@ -43,17 +44,16 @@ types:
       gtin8: ~
       mpn: ~
       color: ~
-      depth: { range: 'Text' }
-      height: { range: 'Text' }
-      weight: { range: 'Text' }
-      width: { range: 'Text' }
-      seller: { range: 'Seller' }
+      depth: { range: 'https://schema.org/Text' }
+      height: { range: 'https://schema.org/Text' }
+      weight: { range: 'https://schema.org/Text' }
+      width: { range: 'https://schema.org/Text' }
+      seller: { range: 'https://schema.org/Seller' }
   Brand:
-    parent: 'Thing'
+    parent: Thing
     properties:
-      logo: { range: 'ImageObject' }
+      logo: { range: 'https://schema.org/ImageObject' }
   Seller:
-    parent: false
     guessFrom: Person
     properties:
       name: ~
@@ -73,18 +73,18 @@ types:
       availabilityStarts: ~
       availabilityEnds: ~
       availableDeliveryMethod: ~
-      category: { range: 'Text' }
+      category: { range: 'https://schema.org/Text' }
       deliveryLeadTime: ~
       inventoryLevel: ~
       itemCondition: ~
-      price: { range: Number }
+      price: { range: https://schema.org/Number }
       priceCurrency: ~
       validFrom: ~
       validThrough: ~
-  DeliveryChargeSpecification: { parent: false }
-  PaymentChargeSpecification: { parent: false }
+  DeliveryChargeSpecification: ~
+  PaymentChargeSpecification: ~
   OfferItemCondition: ~
   PaymentMethod: ~
   ItemAvailability: ~
   DeliveryMethod: ~
-  QuantitativeValue: { parent: false }
+  QuantitativeValue: ~
