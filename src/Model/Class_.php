@@ -66,6 +66,11 @@ final class Class_
         return $this->name;
     }
 
+    // @COREMOD
+    public function setName($name): void {
+        $this->name = $name;
+    }
+
     public function resource(): RdfResource
     {
         return $this->resource;

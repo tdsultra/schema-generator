@@ -40,9 +40,11 @@ final class ApiPlatformCoreAttributeGenerator extends AbstractAttributeGenerator
         }
 
         $arguments = [];
-        if ($class->name() !== $localName = $class->resourceLocalName()) {
-            $arguments['shortName'] = $localName;
-        }
+        // @COREMOD
+        // if ($class->name() !== $localName = $class->resourceLocalName()) {
+        //     $arguments['shortName'] = $localName;
+        // }
+        $arguments['shortName'] = $class->name();
         $arguments['iri'] = $class->resourceUri();
         if ($class->security) {
             $arguments['security'] = $class->security;

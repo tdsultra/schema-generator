@@ -42,10 +42,24 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generateClassAttributes(Class_ $class): array
     {
+        if(!str_starts_with($class->name(), '\App\Entity')) {
+            return [];
+        }
+
         if ($doctrineAttributes = (isset($this->config['types'][$class->name()]) ? $this->config['types'][$class->name()]['doctrine']['attributes'] : false)) {
             $attributes = [];
             foreach ($doctrineAttributes as $attributeName => $attributeArgs) {
-                $attributes[] = new Attribute($attributeName, $attributeArgs);
+                // @COREMOD
+                if($attributeName == 'Indexes') {
+                    foreach($attributeArgs as $indexDefinition) {
+                        foreach($indexDefinition as $_attributeName => $_attributeArgs) {
+                            $attributes[] = new Attribute($_attributeName, $_attributeArgs);
+                        }
+                    }
+                }
+                else {
+                    $attributes[] = new Attribute($attributeName, $attributeArgs);
+                }
             }
 
             return $attributes;
@@ -93,13 +107,33 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generatePropertyAttributes(Property $property, string $className): array
     {
+        if(!str_starts_with($className, '\App\Entity')) {
+            return [];
+        }
+
         if (null === $property->range || null === $property->rangeName) {
             return [];
         }
 
-        if ($property->ormColumn) {
-            return [new Attribute('ORM\Column', $property->ormColumn)];
+        // @COREMOD
+        // if ($property->ormColumn && !isset($property->cardinality)) {
+        //     return [new Attribute('ORM\Column', $property->ormColumn)];
+        // }
+
+        // @TODO Need to add support for onDelete and cascade operations
+        $ormProperties = isset($property->ormColumn) ? $property->ormColumn: [];
+
+        // move this into relationship def
+        $relationProperties = [];
+        if(isset($ormProperties['cascade'])) {
+            $relationProperties['cascade'] = $ormProperties['cascade'];
+            unset($ormProperties['cascade']);
         }
+
+        // if(isset($ormProperties['onDelete'])) {
+        //     $relationProperties['onDelete'] = $ormProperties['onDelete'];
+        //     unset($ormProperties['onDelete']);
+        // }
 
         if ($property->isId) {
             return $this->generateIdAttributes();
@@ -124,6 +158,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                     break;
                 case 'http://www.w3.org/2001/XMLSchema#dateTime':
                 case 'https://schema.org/DateTime':
+                    $type = 'datetime';
+                    break;
+                case 'http://www.w3.org/2001/XMLSchema#date':
+                case 'https://schema.org/Date':
                     $type = 'date';
                     break;
                 default:
@@ -170,6 +208,9 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                 }
             }
 
+            // @COREMOD
+            $args = array_merge($args, $ormProperties);
+
             return [new Attribute('ORM\Column', $args)];
         }
 
@@ -183,36 +224,42 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
             return [new Attribute('ORM\Embedded', ['class' => $relationName, 'columnPrefix' => $property->columnPrefix])];
         }
 
+        // remove options if it's been set as not compatible with join columns
+        if(isset($ormProperties['options'])) {
+            unset($ormProperties['options']);
+        }
+
         $attributes = [];
         switch ($property->cardinality) {
             case CardinalitiesExtractor::CARDINALITY_0_1:
-                $attributes[] = new Attribute('ORM\OneToOne', ['targetEntity' => $relationName]);
+                $attributes[] = new Attribute('ORM\OneToOne', array_merge(['targetEntity' => $relationName], $relationProperties));
                 break;
             case CardinalitiesExtractor::CARDINALITY_1_1:
-                $attributes[] = new Attribute('ORM\OneToOne', ['targetEntity' => $relationName]);
-                $attributes[] = new Attribute('ORM\JoinColumn', ['nullable' => false]);
+                $attributes[] = new Attribute('ORM\OneToOne', array_merge(['targetEntity' => $relationName], $relationProperties));
+                $attributes[] = new Attribute('ORM\JoinColumn', array_merge(['nullable' => false], $ormProperties));
                 break;
             case CardinalitiesExtractor::CARDINALITY_UNKNOWN:
             case CardinalitiesExtractor::CARDINALITY_N_0:
                 if (null !== $property->inversedBy) {
-                    $attributes[] = new Attribute('ORM\ManyToOne', ['targetEntity' => $relationName, 'inversedBy' => $property->inversedBy]);
+                    $attributes[] = new Attribute('ORM\ManyToOne', array_merge(['targetEntity' => $relationName, 'inversedBy' => $property->inversedBy], $relationProperties));
                 } else {
-                    $attributes[] = new Attribute('ORM\ManyToOne', ['targetEntity' => $relationName]);
+                    $attributes[] = new Attribute('ORM\ManyToOne', array_merge(['targetEntity' => $relationName], $relationProperties));
                 }
+                $attributes[] = new Attribute('ORM\JoinColumn', $ormProperties);
                 break;
             case CardinalitiesExtractor::CARDINALITY_N_1:
                 if (null !== $property->inversedBy) {
-                    $attributes[] = new Attribute('ORM\ManyToOne', ['targetEntity' => $relationName, 'inversedBy' => $property->inversedBy]);
+                    $attributes[] = new Attribute('ORM\ManyToOne', array_merge(['targetEntity' => $relationName, 'inversedBy' => $property->inversedBy], $relationProperties));
                 } else {
-                    $attributes[] = new Attribute('ORM\ManyToOne', ['targetEntity' => $relationName]);
+                    $attributes[] = new Attribute('ORM\ManyToOne', array_merge(['targetEntity' => $relationName], $relationProperties));
                 }
-                $attributes[] = new Attribute('ORM\JoinColumn', ['nullable' => false]);
+                $attributes[] = new Attribute('ORM\JoinColumn', array_merge(['nullable' => false], $ormProperties));
                 break;
             case CardinalitiesExtractor::CARDINALITY_0_N:
                 if (null !== $property->mappedBy) {
-                    $attributes[] = new Attribute('ORM\OneToMany', ['targetEntity' => $relationName, 'mappedBy' => $property->mappedBy]);
+                    $attributes[] = new Attribute('ORM\OneToMany', array_merge(['targetEntity' => $relationName, 'mappedBy' => $property->mappedBy], $relationProperties));
                 } else {
-                    $attributes[] = new Attribute('ORM\ManyToMany', ['targetEntity' => $relationName]);
+                    $attributes[] = new Attribute('ORM\ManyToMany', array_merge(['targetEntity' => $relationName], $relationProperties));
                 }
                 if ($property->relationTableName) {
                     $attributes[] = new Attribute('ORM\JoinTable', ['name' => $property->relationTableName]);
@@ -221,9 +268,9 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                 break;
             case CardinalitiesExtractor::CARDINALITY_1_N:
                 if (null !== $property->mappedBy) {
-                    $attributes[] = new Attribute('ORM\OneToMany', ['targetEntity' => $relationName, 'mappedBy' => $property->mappedBy]);
+                    $attributes[] = new Attribute('ORM\OneToMany', array_merge(['targetEntity' => $relationName, 'mappedBy' => $property->mappedBy], $relationProperties));
                 } else {
-                    $attributes[] = new Attribute('ORM\ManyToMany', ['targetEntity' => $relationName]);
+                    $attributes[] = new Attribute('ORM\ManyToMany', array_merge(['targetEntity' => $relationName], $relationProperties));
                 }
                 if ($property->relationTableName) {
                     $attributes[] = new Attribute('ORM\JoinTable', ['name' => $property->relationTableName]);
@@ -231,7 +278,7 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                 $attributes[] = new Attribute('ORM\InverseJoinColumn', ['nullable' => false, 'unique' => true]);
                 break;
             case CardinalitiesExtractor::CARDINALITY_N_N:
-                $attributes[] = new Attribute('ORM\ManyToMany', ['targetEntity' => $relationName]);
+                $attributes[] = new Attribute('ORM\ManyToMany', array_merge(['targetEntity' => $relationName], $relationProperties));
                 if ($property->relationTableName) {
                     $attributes[] = new Attribute('ORM\JoinTable', ['name' => $property->relationTableName]);
                 }
@@ -246,6 +293,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generateUses(Class_ $class): array
     {
+        if(!str_starts_with($class->name(), '\App\Entity')) {
+            return [];
+        }
+
         return $class->isEnum() ? [] : [new Use_('Doctrine\ORM\Mapping', 'ORM')];
     }
 
@@ -286,6 +337,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
         }
 
         $class = $this->classes[$rangeName];
+
+        // @COREMOD
+        //return $class->name();
+        return $rangeName;
 
         if (null !== $class->interfaceName()) {
             if (isset($this->config['types'][$rangeName]['namespaces']['interface'])) {

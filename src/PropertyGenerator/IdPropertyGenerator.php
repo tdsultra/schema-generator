@@ -19,7 +19,7 @@ use EasyRdf\Resource as RdfResource;
 
 final class IdPropertyGenerator
 {
-    public function __invoke(string $generationStrategy, bool $supportsWritableId): Property
+    public function __invoke(string $generationStrategy, bool $supportsWritableId, string $name): Property
     {
         switch ($generationStrategy) {
             case 'auto':
@@ -48,7 +48,8 @@ final class IdPropertyGenerator
                 break;
         }
 
-        $property = new Property('id');
+        // @COREMOD
+        $property = new Property($name);
         $property->rangeName = 'Text';
         $property->range = new RdfResource($uri);
         $property->cardinality = CardinalitiesExtractor::CARDINALITY_1_1;
