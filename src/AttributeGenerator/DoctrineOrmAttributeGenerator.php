@@ -42,9 +42,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generateClassAttributes(Class_ $class): array
     {
-        if(!str_starts_with($class->name(), '\App\Entity')) {
-            return [];
-        }
+        // @COREMOD
+        // if(!str_starts_with($class->name(), '\App\Entity')) {
+        //     return [];
+        // }
 
         if ($doctrineAttributes = (isset($this->config['types'][$class->name()]) ? $this->config['types'][$class->name()]['doctrine']['attributes'] : false)) {
             $attributes = [];
@@ -107,9 +108,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generatePropertyAttributes(Property $property, string $className): array
     {
-        if(!str_starts_with($className, '\App\Entity')) {
-            return [];
-        }
+        // @COREMOD
+        // if(!str_starts_with($className, '\App\Entity')) {
+        //     return [];
+        // }
 
         if (null === $property->range || null === $property->rangeName) {
             return [];
@@ -293,9 +295,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generateUses(Class_ $class): array
     {
-        if(!str_starts_with($class->name(), '\App\Entity')) {
-            return [];
-        }
+        // @COREMOD
+        // if(!str_starts_with($class->name(), '\App\Entity')) {
+        //     return [];
+        // }
 
         return $class->isEnum() ? [] : [new Use_('Doctrine\ORM\Mapping', 'ORM')];
     }
