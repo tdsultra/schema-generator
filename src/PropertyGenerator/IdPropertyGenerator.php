@@ -58,6 +58,8 @@ final class IdPropertyGenerator
         $property->isNullable = $nullable;
         $property->isUnique = false;
         $property->isCustom = true;
+        //@COREMOD
+        $property->groups = ['item:read', 'collection:read'];
         $property->isId = true;
         $property->typeHint = $typeHint;
 
