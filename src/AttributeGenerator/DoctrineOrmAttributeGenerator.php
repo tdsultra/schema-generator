@@ -234,7 +234,7 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
         $attributes = [];
         switch ($property->cardinality) {
             case CardinalitiesExtractor::CARDINALITY_0_1:
-                $attributes[] = new Attribute('ORM\OneToOne', array_merge(['targetEntity' => $relationName], $relationProperties));
+                $attributes[] = new Attribute('ORM\OneToOne', array_merge(['targetEntity' => $relationName], $ormProperties));
                 break;
             case CardinalitiesExtractor::CARDINALITY_1_1:
                 $attributes[] = new Attribute('ORM\OneToOne', array_merge(['targetEntity' => $relationName], $relationProperties));
