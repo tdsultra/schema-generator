@@ -132,6 +132,12 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
             unset($ormProperties['cascade']);
         }
 
+        //Should we limit this by relation type?
+        if(isset($ormProperties['orphanRemoval'])) {
+            $relationProperties['orphanRemoval'] = $ormProperties['orphanRemoval'];
+            unset($ormProperties['orphanRemoval']);
+        }
+
         // if(isset($ormProperties['onDelete'])) {
         //     $relationProperties['onDelete'] = $ormProperties['onDelete'];
         //     unset($ormProperties['onDelete']);
