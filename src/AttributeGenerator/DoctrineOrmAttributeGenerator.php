@@ -132,13 +132,19 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
             unset($ormProperties['cascade']);
         }
 
+        //Should we limit this by relation type?
+        if(isset($ormProperties['orphanRemoval'])) {
+            $relationProperties['orphanRemoval'] = $ormProperties['orphanRemoval'];
+            unset($ormProperties['orphanRemoval']);
+        }
+
         // if(isset($ormProperties['onDelete'])) {
         //     $relationProperties['onDelete'] = $ormProperties['onDelete'];
         //     unset($ormProperties['onDelete']);
         // }
 
         if ($property->isId) {
-            return $this->generateIdAttributes();
+            return $this->generateIdAttributes($className);
         }
 
         if (isset($this->config['types'][$className]['properties'][$property->name()])) {
@@ -307,14 +313,25 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
     /**
      * @return Attribute[]
      */
-    private function generateIdAttributes(): array
+    private function generateIdAttributes(string $className): array
     {
         $attributes = [new Attribute('ORM\Id')];
-        if ('none' !== $this->config['id']['generationStrategy'] && !$this->config['id']['writable']) {
-            $attributes[] = new Attribute('ORM\GeneratedValue', ['strategy' => strtoupper($this->config['id']['generationStrategy'])]);
+
+        $idConfig = [];
+
+        if($this->config['id']) {
+            $idConfig = array_merge($idConfig, $this->config['id']);
         }
 
-        switch ($this->config['id']['generationStrategy']) {
+        if($this->config['types'][$className]['pk']) {
+            $idConfig = array_merge($idConfig, $this->config['types'][$className]['pk']);
+        }
+
+        if ('none' !== $idConfig['generationStrategy'] && !$idConfig['writable']) {
+            $attributes[] = new Attribute('ORM\GeneratedValue', ['strategy' => strtoupper($idConfig['generationStrategy'])]);
+        }
+
+        switch ($idConfig['generationStrategy']) {
             case 'uuid':
                 $type = 'guid';
             break;
