@@ -16,36 +16,46 @@ namespace ApiPlatform\SchemaGenerator\ClassMutator;
 use ApiPlatform\SchemaGenerator\Model\Class_;
 use ApiPlatform\SchemaGenerator\Model\Use_;
 use ApiPlatform\SchemaGenerator\PhpTypeConverterInterface;
-use Psr\Log\LoggerInterface;
+use ApiPlatform\SchemaGenerator\Schema\Model\Class_ as SchemaClass;
+use Psr\Log\LoggerAwareTrait;
 
 final class ClassParentMutator implements ClassMutatorInterface
 {
+    use LoggerAwareTrait;
+
     private PhpTypeConverterInterface $phpTypeConverter;
-    private LoggerInterface $logger;
     /** @var Configuration */
     private array $config;
 
     /**
      * @param Configuration $config
      */
-    public function __construct(array $config, PhpTypeConverterInterface $phpTypeConverter, LoggerInterface $logger)
+    public function __construct(array $config, PhpTypeConverterInterface $phpTypeConverter)
     {
         $this->phpTypeConverter = $phpTypeConverter;
-        $this->logger = $logger;
         $this->config = $config;
     }
 
-    public function __invoke(Class_ $class): Class_
+    /**
+     * @param array{} $context
+     */
+    public function __invoke(Class_ $class, array $context): void
     {
+        if (!$class instanceof SchemaClass) {
+            return;
+        }
+
         $typeConfig = $this->config['types'][$class->name()] ?? null;
         $class->withParent($typeConfig['parent'] ?? null);
 
         if (null === $class->parent() && $subclassOf = $class->getSubClassOf()) {
             if (\count($subclassOf) > 1) {
-                $this->logger->warning(sprintf('The type "%s" has several supertypes. Using the first one.', $class->resourceUri()));
+                $this->logger ? $this->logger->info(sprintf('The type "%s" has several supertypes. Using the first one.', $class->rdfType())) : null;
             }
 
-            $class = $class->withParent($this->phpTypeConverter->escapeIdentifier($subclassOf[0]->localName()));
+            if (\is_string($parentLocalName = $subclassOf[0]->localName())) {
+                $class->withParent($this->phpTypeConverter->escapeIdentifier($parentLocalName));
+            }
         }
 
         if ($class->hasParent() && isset($this->config['types'][$class->parent()]['namespaces']['class'])) {
@@ -58,7 +68,5 @@ final class ClassParentMutator implements ClassMutatorInterface
                 $class->addUse(new Use_($class->parent()));
             }
         }
-
-        return $class;
     }
 }

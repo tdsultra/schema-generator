@@ -15,7 +15,7 @@ namespace ApiPlatform\SchemaGenerator\Command;
 
 use ApiPlatform\SchemaGenerator\CardinalitiesExtractor;
 use ApiPlatform\SchemaGenerator\GoodRelationsBridge;
-use ApiPlatform\SchemaGenerator\TypesGeneratorConfiguration;
+use ApiPlatform\SchemaGenerator\SchemaGeneratorConfiguration;
 use EasyRdf\Graph as RdfGraph;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -37,8 +37,8 @@ final class ExtractCardinalitiesCommand extends Command
         $this
             ->setName('extract-cardinalities')
             ->setDescription('Extract properties\' cardinality')
-            ->addOption('vocabulary-file', 's', InputOption::VALUE_REQUIRED, 'The path or URL of the vocabulary RDF file to use.', TypesGeneratorConfiguration::SCHEMA_ORG_URI)
-            ->addOption('cardinality-file', 'g', InputOption::VALUE_REQUIRED, 'The path or URL of the OWL file containing the cardinality definitions.', TypesGeneratorConfiguration::GOOD_RELATIONS_URI)
+            ->addOption('vocabulary-file', 's', InputOption::VALUE_REQUIRED, 'The path or URL of the vocabulary RDF file to use.', SchemaGeneratorConfiguration::SCHEMA_ORG_URI)
+            ->addOption('cardinality-file', 'g', InputOption::VALUE_REQUIRED, 'The path or URL of the OWL file containing the cardinality definitions.', SchemaGeneratorConfiguration::GOOD_RELATIONS_URI)
         ;
     }
 
@@ -64,8 +64,8 @@ final class ExtractCardinalitiesCommand extends Command
         $cardinality = [new \SimpleXMLElement($input->getOption('cardinality-file'), 0, true)];
 
         $goodRelationsBridge = new GoodRelationsBridge($cardinality);
-        $cardinalitiesExtractor = new CardinalitiesExtractor($relations, $goodRelationsBridge);
-        $result = $cardinalitiesExtractor->extract();
+        $cardinalitiesExtractor = new CardinalitiesExtractor($goodRelationsBridge);
+        $result = $cardinalitiesExtractor->extract($relations);
 
         $output->writeln(json_encode($result, \JSON_THROW_ON_ERROR | \JSON_PRETTY_PRINT));
 

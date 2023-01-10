@@ -28,30 +28,47 @@ class DumpConfigurationTest extends TestCase
         $this->assertEquals(0, $commandTester->execute([]));
         $this->assertEquals(<<<'YAML'
 config:
+    openApi:
+        file:                 null
 
     # RDF vocabularies
     vocabularies:
 
         # Prototype
-        -
+        uri:
 
             # RDF vocabulary to use
-            uri:                  'https://schema.org/version/latest/schemaorg-current-https.rdf' # Example: 'https://schema.org/version/latest/schemaorg-current-https.rdf'
+            uri:                  ~ # Example: 'https://schema.org/version/latest/schemaorg-current-https.rdf'
 
             # RDF vocabulary format
             format:               null # Example: rdfxml
 
+            # Generate all types for this vocabulary, even if an explicit configuration exists. If allTypes is enabled globally, it can be disabled for this particular vocabulary
+            allTypes:             null
+
+            # Attributes (merged with generated attributes)
+            attributes:           []
+
     # Namespace of the vocabulary to import
     vocabularyNamespace:  'https://schema.org/' # Example: 'http://www.w3.org/ns/activitystreams#'
 
-    # OWL relation files containing cardinality information in the GoodRelations format
-    relations:            # Example: 'https://archive.org/services/purl/goodrelations/v1.owl'
+    # Relations configuration
+    relations:
 
-        # Default:
-        - https://archive.org/services/purl/goodrelations/v1.owl
+        # OWL relation URIs containing cardinality information in the GoodRelations format
+        uris:                 # Example: 'https://archive.org/services/purl/goodrelations/v1.owl'
+
+            # Default:
+            - https://archive.org/services/purl/goodrelations/v1.owl
+
+        # The default cardinality to use when it cannot be extracted
+        defaultCardinality:   (1..1) # One of "(0..1)"; "(0..*)"; "(1..1)"; "(1..*)"; "(*..0)"; "(*..1)"; "(*..*)"
 
     # Debug mode
     debug:                false
+
+    # Use old API Platform attributes (API Platform < 2.7)
+    apiPlatformOldAttributes: false
 
     # IDs configuration
     id:
@@ -64,9 +81,6 @@ config:
 
         # Is the ID writable? Only applicable if "generationStrategy" is "uuid".
         writable:             false
-
-        # Set to "child" to generate the id on the child class, and "parent" to use the parent class instead.
-        onClass:              child # One of "child"; "parent"
 
     # Generate interfaces and use Doctrine's Resolve Target Entity feature
     useInterface:         false
@@ -92,6 +106,18 @@ config:
         # The namespace of the generated interfaces
         interface:            App\Model # Example: App\Model
 
+    # Custom uses (for instance if you use a custom attribute)
+    uses:
+
+        # Prototype
+        name:
+
+            # Name of this use
+            name:                 ~ # Example: App\Attributes\MyAttribute
+
+            # The alias to use for this use
+            alias:                null
+
     # Doctrine
     doctrine:
 
@@ -106,6 +132,12 @@ config:
 
         # Doctrine inheritance attributes (if set, no other attributes are generated)
         inheritanceAttributes: []
+
+        # The inheritance type to use when an entity is referenced by another and has child
+        inheritanceType:      JOINED # One of "JOINED"; "SINGLE_TABLE"; "SINGLE_COLLECTION"; "TABLE_PER_CLASS"; "COLLECTION_PER_CLASS"; "NONE"
+
+        # Maximum length of any given database identifier, like tables or column names
+        maxIdentifierLength:  63
 
     # Symfony Validator Component
     validator:
@@ -131,6 +163,9 @@ config:
 
     # Generate all types, even if an explicit configuration exists
     allTypes:             false
+
+    # If a type is present in a vocabulary but not explicitly imported (types) or if the vocabulary is not totally imported (allTypes), it will be generated
+    resolveTypes:         false
 
     # Types to import from the vocabulary
     types:
@@ -158,10 +193,9 @@ config:
 
                 # The namespace for the generated interface (override any other defined namespace)
                 interface:            null
-            doctrine:
 
-                # Doctrine attributes (if set, no other attributes are generated)
-                attributes:           []
+            # Attributes (merged with generated attributes)
+            attributes:           []
 
             # The parent class, set to false for a top level class
             parent:               false
@@ -171,9 +205,6 @@ config:
 
             # Operations for the class
             operations:           []
-
-            # Security directive for the class
-            security:             null
 
             # Import all existing properties
             allProperties:        false
@@ -189,16 +220,7 @@ config:
 
                     # The property range
                     range:                null # Example: Offer
-
-                    # The relation table name
-                    relationTableName:    null # Example: organization_member
                     cardinality:          unknown # One of "(0..1)"; "(0..*)"; "(1..1)"; "(1..*)"; "(*..0)"; "(*..1)"; "(*..*)"; "unknown"
-
-                    # The doctrine column attribute content
-                    ormColumn:            [] # Example: '{type: "decimal", precision: 5, scale: 1, options: {comment: "my comment"}}'
-
-                    # Security directive for the property
-                    security:             null
 
                     # Symfony Serialization Groups
                     groups:               []
@@ -215,8 +237,14 @@ config:
                     # Is the property writable?
                     writable:             true
 
-                    # Is the property nullable?
-                    nullable:             true
+                    # Is the property nullable? (if null, cardinality will be used: will be true if no cardinality found)
+                    nullable:             null
+
+                    # The property default value
+                    defaultValue:         null
+
+                    # Is the property required?
+                    required:             true
 
                     # The property unique
                     unique:               false
@@ -224,8 +252,8 @@ config:
                     # Is the property embedded?
                     embedded:             false
 
-                    # The property columnPrefix
-                    columnPrefix:         false
+                    # Attributes (merged with generated attributes)
+                    attributes:           []
 
     # Annotation generators to use
     annotationGenerators:
@@ -238,16 +266,17 @@ config:
 
         # Defaults:
         - ApiPlatform\SchemaGenerator\AttributeGenerator\DoctrineOrmAttributeGenerator
+        - ApiPlatform\SchemaGenerator\AttributeGenerator\DoctrineOrmAssociationOverrideAttributeGenerator
         - ApiPlatform\SchemaGenerator\AttributeGenerator\ApiPlatformCoreAttributeGenerator
         - ApiPlatform\SchemaGenerator\AttributeGenerator\ConstraintAttributeGenerator
-        - ApiPlatform\SchemaGenerator\AttributeGenerator\SerializerGroupsAttributeGenerator
+        - ApiPlatform\SchemaGenerator\AttributeGenerator\ConfigurationAttributeGenerator
 
     # Directories for custom generator twig templates
     generatorTemplates:   []
 
 
 YAML
-                ,
+            ,
             $commandTester->getDisplay()
         );
     }

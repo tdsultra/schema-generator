@@ -14,34 +14,36 @@ declare(strict_types=1);
 namespace ApiPlatform\SchemaGenerator\ClassMutator;
 
 use ApiPlatform\SchemaGenerator\Model\Class_;
-use ApiPlatform\SchemaGenerator\PropertyGenerator\IdPropertyGenerator;
+use ApiPlatform\SchemaGenerator\PropertyGenerator\IdPropertyGeneratorInterface;
 
 final class ClassIdAppender implements ClassMutatorInterface
 {
+    private IdPropertyGeneratorInterface $idPropertyGenerator;
     /** @var Configuration */
     private array $config;
 
     /**
      * @param Configuration $config
      */
-    public function __construct(array $config)
+    public function __construct(IdPropertyGeneratorInterface $idPropertyGenerator, array $config)
     {
+        $this->idPropertyGenerator = $idPropertyGenerator;
         $this->config = $config;
     }
 
-    public function __invoke(Class_ $class): Class_
+    /**
+     * @param array{} $context
+     */
+    public function __invoke(Class_ $class, array $context): void
     {
-        // @COREMOD
-        // $config is only the ['id'] portion
         if (
-            $class->isEnum()
-            || $class->isEmbeddable
-            || ($class->hasParent() && 'parent' === $this->config['onClass'])
-            || ($class->hasChild && 'child' === $this->config['onClass'])
+            $class->isEmbeddable
+            || $class->isEnum()
+            || $class->hasParent()
         ) {
-            return $class;
+            return;
         }
 
-        return $class->addProperty((new IdPropertyGenerator())($this->config['generationStrategy'], $this->config['writable'], $this->config['name']));
+        $class->addProperty(($this->idPropertyGenerator)($this->config['id']['generationStrategy'], $this->config['id']['writable']));
     }
 }

@@ -13,44 +13,42 @@ declare(strict_types=1);
 
 namespace ApiPlatform\SchemaGenerator\Model;
 
-use EasyRdf\Resource as RdfResource;
+use ApiPlatform\SchemaGenerator\Model\Type\ArrayType;
+use ApiPlatform\SchemaGenerator\Model\Type\Type;
 use Nette\PhpGenerator\ClassType;
 use Nette\PhpGenerator\Method;
 use Nette\PhpGenerator\PhpNamespace;
 use Nette\PhpGenerator\Property as NetteProperty;
 
-final class Property
+abstract class Property
 {
+    use AddAttributeTrait;
     use ResolveNameTrait;
 
     private string $name;
-    public ?RdfResource $resource = null;
     public string $cardinality;
-    public ?RdfResource $range = null;
-    public ?string $rangeName = null;
-    /** @var array<string, string|string[]> */
-    public ?array $ormColumn = null;
-    public bool $isArray = false;
+    /** @var ?Type the data types (object is not one) */
+    public ?Type $type = null;
+    /** @var mixed */
+    public $defaultValue = null;
+    public ?Class_ $reference = null;
     public bool $isReadable = true;
     public bool $isReadableLink = true;
     public bool $isWritable = true;
     public bool $isWritableLink = true;
+    public bool $isRequired = false;
     public bool $isNullable = true;
     public bool $isUnique = false;
     public bool $isCustom = false;
     public bool $isEmbedded = false;
     public ?string $mappedBy = null;
     public ?string $inversedBy = null;
-    /** @var string|bool */
-    public $columnPrefix = false;
     public bool $isId = false;
     public ?string $typeHint = null;
-    public ?string $relationTableName = null;
     public bool $isEnum = false;
     public ?string $adderRemoverTypeHint = null;
     /** @var string[] */
     public array $groups = [];
-    public ?string $security = null;
     /** @var Attribute[] */
     private array $attributes = [];
     /** @var string[] */
@@ -74,13 +72,13 @@ final class Property
         return $this->name;
     }
 
-    public function addAttribute(Attribute $attribute): self
-    {
-        if (!\in_array($attribute, $this->attributes, true)) {
-            $this->attributes[] = $attribute;
-        }
+    abstract public function description(): ?string;
 
-        return $this;
+    abstract public function rdfType(): ?string;
+
+    public function isArray(): bool
+    {
+        return $this->type instanceof ArrayType;
     }
 
     public function addAnnotation(string $annotation): self
@@ -136,11 +134,6 @@ final class Property
         return $this;
     }
 
-    public function resourceUri(): ?string
-    {
-        return $this->resource ? $this->resource->getUri() : null;
-    }
-
     public function markAsCustom(): self
     {
         $this->isCustom = true;
@@ -158,11 +151,13 @@ final class Property
             $property->setType($this->resolveName($namespace, $this->typeHint));
         }
 
-        if (!$this->isArray || $this->isTypeHintedAsCollection()) {
+        if (!$this->isArray() || $this->isTypeHintedAsCollection()) {
             $property->setNullable($this->isNullable);
         }
 
-        if (($default = $this->guessDefaultGeneratedValue($useDoctrineCollections)) !== -1) {
+        if (null !== $default = $this->defaultValue) {
+            $property->setValue($default);
+        } elseif (-1 !== $default = $this->guessDefaultGeneratedValue($useDoctrineCollections)) {
             $property->setValue($default);
         }
 
@@ -216,7 +211,7 @@ final class Property
         }
         if ($this->typeHint) {
             $getter->setReturnType($this->resolveName($namespace, $this->typeHint));
-            if ($this->isNullable && !$this->isArray) {
+            if ($this->isNullable && !$this->isArray()) {
                 $getter->setReturnNullable();
             }
         }
@@ -239,7 +234,7 @@ final class Property
         }
 
         $mutators = [];
-        if ($this->isArray) {
+        if ($this->isArray()) {
             $singularProperty = $singularize($this->name());
 
             $adder = (new Method('add'.ucfirst($singularProperty)))->setVisibility(ClassType::VISIBILITY_PUBLIC);
@@ -317,7 +312,7 @@ PHP,
      */
     private function guessDefaultGeneratedValue(bool $useDoctrineCollections = true)
     {
-        if ($this->isArray && !$this->isTypeHintedAsCollection() && ($this->isEnum || !$this->typeHint || 'array' === $this->typeHint || !$useDoctrineCollections)) {
+        if (($this->isEnum || !$this->typeHint || 'array' === $this->typeHint || !$useDoctrineCollections) && $this->isArray() && !$this->isTypeHintedAsCollection()) {
             return [];
         }
 

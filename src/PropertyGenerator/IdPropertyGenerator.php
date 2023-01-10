@@ -15,45 +15,44 @@ namespace ApiPlatform\SchemaGenerator\PropertyGenerator;
 
 use ApiPlatform\SchemaGenerator\CardinalitiesExtractor;
 use ApiPlatform\SchemaGenerator\Model\Property;
-use EasyRdf\Resource as RdfResource;
+use ApiPlatform\SchemaGenerator\Model\Type\PrimitiveType;
 
-final class IdPropertyGenerator
+final class IdPropertyGenerator implements IdPropertyGeneratorInterface
 {
-    public function __invoke(string $generationStrategy, bool $supportsWritableId, string $name): Property
+    public function __invoke(string $generationStrategy, bool $supportsWritableId, ?Property $property = null): Property
     {
+        if (!$property) {
+            throw new \LogicException('A property must be given.');
+        }
+
         switch ($generationStrategy) {
             case 'auto':
-                $uri = 'https://schema.org/Integer';
+                $type = 'integer';
                 $typeHint = 'int';
                 $writable = false;
                 $nullable = true;
                 break;
             case 'uuid':
-                $uri = 'https://schema.org/Text';
+                $type = 'string';
                 $typeHint = 'string';
                 $writable = $supportsWritableId;
                 $nullable = !$writable;
                 break;
             case 'mongoid':
-                $uri = 'https://schema.org/Text';
+                $type = 'string';
                 $typeHint = 'string';
                 $writable = false;
                 $nullable = true;
                 break;
             default:
-                $uri = 'https://schema.org/Text';
+                $type = 'string';
                 $typeHint = 'string';
                 $writable = true;
                 $nullable = false;
                 break;
         }
 
-        // @COREMOD
-        $property = new Property($name);
-        $property->rangeName = 'Text';
-        $property->range = new RdfResource($uri);
         $property->cardinality = CardinalitiesExtractor::CARDINALITY_1_1;
-        $property->ormColumn = null;
         $property->isWritable = $writable;
         $property->isNullable = $nullable;
         $property->isUnique = false;
@@ -61,6 +60,7 @@ final class IdPropertyGenerator
         //@COREMOD
         $property->groups = ['item:read', 'collection:read'];
         $property->isId = true;
+        $property->type = new PrimitiveType($type);
         $property->typeHint = $typeHint;
 
         return $property;

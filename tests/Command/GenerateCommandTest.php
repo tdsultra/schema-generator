@@ -72,7 +72,64 @@ class GenerateCommandTest extends TestCase
         return $this->friends;
     }
 PHP
-        , $person);
+            , $person);
+    }
+
+    public function testCustomAttributes(): void
+    {
+        $outputDir = __DIR__.'/../../build/custom-attributes';
+        $config = __DIR__.'/../config/custom-attributes.yaml';
+        $this->fs->mkdir($outputDir);
+        $commandTester = new CommandTester(new GenerateCommand());
+        $this->assertEquals(0, $commandTester->execute(['output' => $outputDir, 'config' => $config]));
+
+        $book = file_get_contents("$outputDir/App/Entity/Book.php");
+
+        // Attributes given as ordered map (omap).
+        $this->assertStringContainsString(<<<'PHP'
+use ApiPlatform\Metadata\ApiProperty;
+use ApiPlatform\Metadata\ApiResource;
+use App\Attributes\MyAttribute;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Validator\Constraints as Assert;
+
+/**
+ * A book.
+ *
+ * @see https://schema.org/Book
+ */
+#[ORM\Entity]
+#[ApiResource(types: ['https://schema.org/Book'], routePrefix: '/library')]
+#[ORM\UniqueConstraint(name: 'isbn', columns: ['isbn'])]
+#[ORM\UniqueConstraint(name: 'title', columns: ['title'])]
+#[MyAttribute]
+class Book
+{
+PHP
+            , $book);
+
+        // Attributes given as unordered map.
+        $this->assertStringContainsString(<<<'PHP'
+    #[ORM\OneToMany(targetEntity: 'App\Entity\Review', mappedBy: 'book', cascade: ['persist', 'remove'])]
+PHP
+            , $book);
+        $this->assertStringContainsString(<<<'PHP'
+    #[ORM\OrderBy(name: 'ASC')]
+PHP
+            , $book);
+        // Generated attribute could be merged with next one that is a configured one.
+        $this->assertStringContainsString(<<<'PHP'
+    #[ORM\InverseJoinColumn(nullable: false, unique: true, name: 'first_join_column')]
+PHP
+            , $book);
+        // Configured attribute could not be merged with next one and it is treated
+        // as repeated.
+        $this->assertStringContainsString(<<<'PHP'
+    #[ORM\InverseJoinColumn(name: 'second_join_column')]
+PHP
+            , $book);
     }
 
     public function testFluentMutators(): void
@@ -92,7 +149,7 @@ PHP
         return $this;
     }
 PHP
-        , $person);
+            , $person);
 
         $this->assertStringContainsString(<<<'PHP'
     public function addFriend(Person $friend): self
@@ -162,6 +219,22 @@ PHP
         $this->assertStringNotContainsString('setName(', $webPage);
     }
 
+    public function testPropertyDefault(): void
+    {
+        $outputDir = __DIR__.'/../../build/property-default';
+        $config = __DIR__.'/../config/property-default.yaml';
+        $this->fs->mkdir($outputDir);
+        $commandTester = new CommandTester(new GenerateCommand());
+        $this->assertEquals(0, $commandTester->execute(['output' => $outputDir, 'config' => $config]));
+
+        $book = file_get_contents("$outputDir/App/Entity/Book.php");
+
+        $this->assertStringContainsString(<<<'PHP'
+    private string $availability = 'https://schema.org/InStock';
+PHP
+            , $book);
+    }
+
     public function testReadableWritable(): void
     {
         $outputDir = __DIR__.'/../../build/readable-writable';
@@ -211,7 +284,7 @@ PHP
         return $this->id;
     }
 PHP
-        , $person);
+            , $person);
 
         $this->assertStringNotContainsString('setId(', $person);
     }
@@ -319,7 +392,7 @@ PHP
     }
 
 PHP
-        , $person);
+            , $person);
     }
 
     public function testDoNotGenerateId(): void
@@ -416,12 +489,54 @@ PHP
      * @see https://schema.org/award
      */
     #[ORM\Column(type: 'text', nullable: true)]
-    #[ApiProperty(iri: 'https://schema.org/award')]
+    #[ApiProperty(types: ['https://schema.org/award'])]
     private ?string $award = null;
 PHP
             , $creativeWork);
 
         $this->assertStringNotContainsString('protected', $creativeWork);
+    }
+
+    public function testActivityStreams(): void
+    {
+        $outputDir = __DIR__.'/../../build/activity-streams';
+        $config = __DIR__.'/../config/activity-streams.yaml';
+
+        $this->fs->mkdir($outputDir);
+
+        $commandTester = new CommandTester(new GenerateCommand());
+        $this->assertEquals(0, $commandTester->execute(['output' => $outputDir, 'config' => $config]));
+
+        $object = file_get_contents("$outputDir/App/Entity/Object_.php");
+
+        $this->assertStringContainsString(<<<'PHP'
+    /**
+     * The content of the object.
+     *
+     * @see http://www.w3.org/ns/activitystreams#content
+     */
+    #[ORM\Column(type: 'text', nullable: true, name: '`content`')]
+    #[ApiProperty(types: ['http://www.w3.org/ns/activitystreams#content'])]
+    private ?string $content = null;
+PHP
+            , $object);
+
+        $page = file_get_contents("$outputDir/App/Entity/Page.php");
+
+        $this->assertStringContainsString(<<<'PHP'
+/**
+ * A Web Page.
+ *
+ * @see http://www.w3.org/ns/activitystreams#Page
+ */
+#[ORM\Entity]
+#[ApiResource(types: ['http://www.w3.org/ns/activitystreams#Page'], routePrefix: 'as')]
+class Page extends Object_
+PHP
+            , $page);
+
+        self::assertFalse($this->fs->exists("$outputDir/App/Entity/Delete.php"));
+        self::assertFalse($this->fs->exists("$outputDir/App/Entity/Travel.php"));
     }
 
     public function testGenerationWithoutConfigFileQuestion(): void

@@ -16,17 +16,19 @@ namespace ApiPlatform\SchemaGenerator\Tests\AttributeGenerator;
 use ApiPlatform\SchemaGenerator\AttributeGenerator\DoctrineMongoDBAttributeGenerator;
 use ApiPlatform\SchemaGenerator\CardinalitiesExtractor;
 use ApiPlatform\SchemaGenerator\Model\Attribute;
-use ApiPlatform\SchemaGenerator\Model\Class_;
-use ApiPlatform\SchemaGenerator\Model\Property;
+use ApiPlatform\SchemaGenerator\Model\Type\ArrayType;
 use ApiPlatform\SchemaGenerator\PhpTypeConverter;
+use ApiPlatform\SchemaGenerator\Schema\Model\Class_ as SchemaClass;
+use ApiPlatform\SchemaGenerator\Schema\Model\Property;
+use ApiPlatform\SchemaGenerator\Schema\Model\Type\PrimitiveType as SchemaPrimitiveType;
+use ApiPlatform\SchemaGenerator\SchemaGeneratorConfiguration;
 use ApiPlatform\SchemaGenerator\TypesGenerator;
-use ApiPlatform\SchemaGenerator\TypesGeneratorConfiguration;
-use Doctrine\Inflector\InflectorFactory;
 use EasyRdf\Graph as RdfGraph;
 use EasyRdf\Resource as RdfResource;
+use Nette\PhpGenerator\Literal;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\NullLogger;
 use Symfony\Component\Config\Definition\Processor;
+use Symfony\Component\String\Inflector\EnglishInflector;
 
 class DoctrineMongoDBAttributeGeneratorTest extends TestCase
 {
@@ -38,60 +40,79 @@ class DoctrineMongoDBAttributeGeneratorTest extends TestCase
     {
         $graph = new RdfGraph();
 
-        $product = new Class_('Product', new RdfResource('https://schema.org/Product', $graph));
-        $product->isAbstract = true;
+        $thing = new SchemaClass('Thing', new RdfResource('https://schema.org/Thing', $graph));
+        $thing->isAbstract = true;
+        $thing->hasChild = true;
+        $this->classMap[$thing->name()] = $thing;
+
+        $organization = new SchemaClass('Organization', new RdfResource('https://schema.org/Organization', $graph));
+        $this->classMap[$organization->name()] = $organization;
+
+        $product = new SchemaClass('Product', new RdfResource('https://schema.org/Product', $graph), 'Thing');
+        $product->hasChild = true;
+        $product->isReferencedBy = [$organization];
         $this->classMap[$product->name()] = $product;
 
-        $vehicle = new Class_('Vehicle', new RdfResource('htts://schema.org/Vehicle', $graph));
+        $vehicle = new SchemaClass('Vehicle', new RdfResource('htts://schema.org/Vehicle', $graph), 'Product');
+        $vehicle->hasChild = true;
+        $vehicle->isAbstract = true;
         $idProperty = new Property('id');
         $idProperty->rangeName = 'identifier';
         $idProperty->range = new RdfResource('https://schema.org/identifier');
+        $idProperty->type = new SchemaPrimitiveType('string');
         $idProperty->isId = true;
         $vehicle->addProperty($idProperty);
         $enumProperty = new Property('enum');
         $enumProperty->rangeName = 'Thing';
         $enumProperty->range = new RdfResource('https://schema.org/Thing');
+        $enumProperty->reference = new SchemaClass('Thing', new RdfResource('htts://schema.org/Thing', $graph));
         $enumProperty->isEnum = true;
-        $enumProperty->isArray = true;
+        $enumProperty->type = new ArrayType();
         $vehicle->addProperty($enumProperty);
         $collectionProperty = new Property('collection');
         $collectionProperty->rangeName = 'string';
         $collectionProperty->range = new RdfResource('http://www.w3.org/2001/XMLSchema#string');
-        $collectionProperty->isArray = true;
+        $collectionProperty->type = new ArrayType(new SchemaPrimitiveType('string'));
         $vehicle->addProperty($collectionProperty);
         $weightProperty = new Property('weight');
         $weightProperty->rangeName = 'nonPositiveInteger';
         $weightProperty->range = new RdfResource('http://www.w3.org/2001/XMLSchema#nonPositiveInteger');
+        $weightProperty->type = new SchemaPrimitiveType('nonPositiveInteger');
         $vehicle->addProperty($weightProperty);
+        $productProperty = new Property('product');
+        $productProperty->rangeName = 'Product';
+        $productProperty->range = new RdfResource('https://schema.org/Product');
+        $productProperty->reference = $product;
+        $vehicle->addProperty($productProperty);
         $relationProperty = new Property('relation');
         $relationProperty->rangeName = 'Person';
         $relationProperty->range = new RdfResource('https://schema.org/Person');
+        $relationProperty->reference = new SchemaClass('Person', new RdfResource('htts://schema.org/Person', $graph));
         $relationProperty->cardinality = CardinalitiesExtractor::CARDINALITY_1_1;
         $vehicle->addProperty($relationProperty);
         $relationsProperty = new Property('relations');
         $relationsProperty->rangeName = 'Person';
         $relationsProperty->range = new RdfResource('https://schema.org/Person');
+        $relationsProperty->reference = new SchemaClass('Person', new RdfResource('htts://schema.org/Person', $graph));
         $relationsProperty->cardinality = CardinalitiesExtractor::CARDINALITY_1_N;
-        $relationsProperty->isArray = true;
+        $relationsProperty->type = new ArrayType();
         $vehicle->addProperty($relationsProperty);
 
         $this->classMap[$vehicle->name()] = $vehicle;
 
+        $car = new SchemaClass('Car', new RdfResource('https://schema.org/Car', $graph), 'Vehicle');
+        $this->classMap[$car->name()] = $car;
+
         $myEnum = new RdfResource('https://schema.org/MyEnum', $graph);
         $myEnum->add('rdfs:subClassOf', ['type' => 'uri', 'value' => TypesGenerator::SCHEMA_ORG_ENUMERATION]);
-        $myEnumClass = new Class_('MyEnum', $myEnum);
+        $myEnumClass = new SchemaClass('MyEnum', $myEnum);
         $this->classMap[$myEnumClass->name()] = $myEnumClass;
 
-        $customAttributes = new RdfResource('https://schema.org/CustomAttributes', $graph);
-        $customAttributesClass = new Class_('CustomAttributes', $customAttributes);
-        $this->classMap[$customAttributesClass->name()] = $customAttributesClass;
-
-        $configuration = new TypesGeneratorConfiguration();
+        $configuration = new SchemaGeneratorConfiguration();
         /** @var Configuration $processedConfiguration */
         $processedConfiguration = (new Processor())->processConfiguration($configuration, [[
             'id' => ['generationStrategy' => 'auto', 'writable' => true],
             'types' => [
-                'CustomAttributes' => ['doctrine' => ['attributes' => ['MongoDB\Document' => ['db' => 'my_db']]]],
                 'Product' => null,
                 // Vehicle is not added deliberately
             ],
@@ -99,10 +120,7 @@ class DoctrineMongoDBAttributeGeneratorTest extends TestCase
 
         $this->generator = new DoctrineMongoDBAttributeGenerator(
             new PhpTypeConverter(),
-            new NullLogger(),
-            InflectorFactory::create()->build(),
-            [],
-            [],
+            new EnglishInflector(),
             $processedConfiguration,
             $this->classMap
         );
@@ -111,12 +129,17 @@ class DoctrineMongoDBAttributeGeneratorTest extends TestCase
     public function testGenerateClassAttributes(): void
     {
         $this->assertSame([], $this->generator->generateClassAttributes($this->classMap['MyEnum']));
-        $this->assertEquals([new Attribute('MongoDB\Document', ['db' => 'my_db'])], $this->generator->generateClassAttributes($this->classMap['CustomAttributes']));
-        $this->assertEquals([new Attribute('MongoDB\MappedSuperclass')], $this->generator->generateClassAttributes($this->classMap['Product']));
-        $this->assertEquals([new Attribute('MongoDB\Document')], $this->generator->generateClassAttributes($this->classMap['Vehicle']));
+        $this->assertEquals([new Attribute('MongoDB\MappedSuperclass')], $this->generator->generateClassAttributes($this->classMap['Thing']));
+        $this->assertEquals([
+            new Attribute('MongoDB\Document'),
+            new Attribute('MongoDB\InheritanceType', ['SINGLE_COLLECTION']),
+            new Attribute('MongoDB\DiscriminatorField', ['discr']),
+            new Attribute('MongoDB\DiscriminatorMap', [['product' => new Literal('Product::class'), 'car' => new Literal('Car::class')]]),
+        ], $this->generator->generateClassAttributes($this->classMap['Product']));
+        $this->assertEquals([new Attribute('MongoDB\Document')], $this->generator->generateClassAttributes($this->classMap['Car']));
     }
 
-    public function testGenerateFieldAttributes(): void
+    public function testGeneratePropertyAttributes(): void
     {
         $this->assertEquals(
             [new Attribute('MongoDB\Id', ['strategy' => 'INCREMENT'])],
@@ -135,11 +158,11 @@ class DoctrineMongoDBAttributeGeneratorTest extends TestCase
             $this->generator->generatePropertyAttributes($this->classMap['Vehicle']->getPropertyByName('weight'), 'Vehicle')
         );
         $this->assertEquals(
-            [new Attribute('MongoDB\ReferenceOne', ['targetDocument' => 'Person', 'simple' => true])],
+            [new Attribute('MongoDB\ReferenceOne', ['targetDocument' => 'Person'])],
             $this->generator->generatePropertyAttributes($this->classMap['Vehicle']->getPropertyByName('relation'), 'Vehicle')
         );
         $this->assertEquals(
-            [new Attribute('MongoDB\ReferenceMany', ['targetDocument' => 'Person', 'simple' => true])],
+            [new Attribute('MongoDB\ReferenceMany', ['targetDocument' => 'Person'])],
             $this->generator->generatePropertyAttributes($this->classMap['Vehicle']->getPropertyByName('relations'), 'Vehicle')
         );
     }

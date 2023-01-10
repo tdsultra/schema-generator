@@ -13,12 +13,21 @@ declare(strict_types=1);
 
 namespace ApiPlatform\SchemaGenerator\AttributeGenerator;
 
-use ApiPlatform\Core\Annotation\ApiProperty;
-use ApiPlatform\Core\Annotation\ApiResource;
+use ApiPlatform\Core\Annotation\ApiProperty as OldApiProperty;
+use ApiPlatform\Core\Annotation\ApiResource as OldApiResource;
+use ApiPlatform\Metadata\ApiProperty;
+use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
 use ApiPlatform\SchemaGenerator\Model\Attribute;
 use ApiPlatform\SchemaGenerator\Model\Class_;
 use ApiPlatform\SchemaGenerator\Model\Property;
 use ApiPlatform\SchemaGenerator\Model\Use_;
+use Nette\PhpGenerator\Literal;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
@@ -35,33 +44,49 @@ final class ApiPlatformCoreAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generateClassAttributes(Class_ $class): array
     {
-        if ($class->isAbstract || $class->isEnum()) {
+        if ($class->hasChild || $class->isEnum()) {
             return [];
         }
 
         $arguments = [];
-        // @COREMOD
-        // if ($class->name() !== $localName = $class->resourceLocalName()) {
-        //     $arguments['shortName'] = $localName;
-        // }
-        $arguments['shortName'] = $class->name();
-        $arguments['iri'] = $class->resourceUri();
-        if ($class->security) {
-            $arguments['security'] = $class->security;
+        if ($class->name() !== $localName = $class->shortName()) {
+            $arguments['shortName'] = $localName;
+        }
+
+        $arguments['shortName'] = $class->name(); // COREMOD
+
+        if ($class->rdfType()) {
+            if ($this->config['apiPlatformOldAttributes']) {
+                $arguments['iri'] = $class->rdfType();
+            } else {
+                $arguments['types'] = [$class->rdfType()];
+            }
         }
 
         if ($class->operations) {
-            $operations = $this->validateClassOperations($class->operations);
-            foreach ($operations as $operationTarget => $targetOperations) {
-                $targetArguments = [];
-                foreach ($targetOperations as $method => $methodConfig) {
-                    $methodArguments = [];
-                    foreach ($methodConfig as $key => $value) {
-                        $methodArguments[$key] = $value;
+            if ($this->config['apiPlatformOldAttributes']) {
+                $operations = $this->validateClassOperations($class->operations);
+                foreach ($operations as $operationTarget => $targetOperations) {
+                    $targetArguments = [];
+                    foreach ($targetOperations ?? [] as $method => $methodConfig) {
+                        $methodArguments = [];
+                        if (!is_iterable($methodConfig)) {
+                            continue;
+                        }
+                        foreach ($methodConfig as $key => $value) {
+                            $methodArguments[$key] = $value;
+                        }
+                        $targetArguments[$method] = $methodArguments;
                     }
-                    $targetArguments[$method] = $methodArguments;
+                    $arguments[sprintf('%sOperations', $operationTarget)] = $targetArguments;
                 }
-                $arguments[sprintf('%sOperations', $operationTarget)] = $targetArguments;
+            } else {
+                $arguments['operations'] = [];
+                foreach ($class->operations as $operationMetadataClass => $methodConfig) {
+                    $arguments['operations'][] = new Literal(sprintf('new %s(...?:)',
+                        $operationMetadataClass,
+                    ), [$methodConfig ?? []]);
+                }
             }
         }
 
@@ -69,7 +94,7 @@ final class ApiPlatformCoreAttributeGenerator extends AbstractAttributeGenerator
     }
 
     /**
-     * Verifies that the operations config is valid.
+     * Verifies that the operations' config is valid.
      *
      * @template T of array
      *
@@ -94,20 +119,12 @@ final class ApiPlatformCoreAttributeGenerator extends AbstractAttributeGenerator
     {
         $arguments = [];
 
-        if(!$property->isReadableLink) {
-            $arguments['readableLink'] = false;
-        }
-
-        if(!$property->isWritableLink) {
-            $arguments['writableLink'] = false;
-        }
-
-        if ($property->security) {
-            $arguments['security'] = $property->security;
-        }        
-
-        if(!$property->isCustom) {
-            $arguments['iri'] = $property->resourceUri();
+        if ($property->rdfType()) {
+            if ($this->config['apiPlatformOldAttributes']) {
+                $arguments['iri'] = $property->rdfType();
+            } else {
+                $arguments['types'] = [$property->rdfType()];
+            }
         }
 
         //@COREMOD
@@ -119,6 +136,19 @@ final class ApiPlatformCoreAttributeGenerator extends AbstractAttributeGenerator
      */
     public function generateUses(Class_ $class): array
     {
-        return [new Use_(ApiResource::class), new Use_(ApiProperty::class)];
+        if ($this->config['apiPlatformOldAttributes']) {
+            return [new Use_(OldApiResource::class), new Use_(OldApiProperty::class)];
+        }
+
+        return [
+            new Use_(ApiResource::class),
+            new Use_(ApiProperty::class),
+            new Use_(Get::class),
+            new Use_(Put::class),
+            new Use_(Patch::class),
+            new Use_(Delete::class),
+            new Use_(GetCollection::class),
+            new Use_(Post::class),
+        ];
     }
 }

@@ -17,5 +17,6 @@ use ApiPlatform\SchemaGenerator\Model\Class_;
 
 interface ClassMutatorInterface
 {
-    public function __invoke(Class_ $class): Class_;
+    // @phpstan-ignore-next-line dynamic context
+    public function __invoke(Class_ $class, array $context): void;
 }

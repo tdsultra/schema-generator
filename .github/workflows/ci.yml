@@ -16,17 +16,18 @@ jobs:
         php:
           - '7.4'
           - '8.0'
+          - '8.1'
         include:
-          - php: '8.0'
+          - php: '8.1'
             coverage: true
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Get Composer Cache Directory
         id: composer-cache
         run: echo "::set-output name=dir::$(composer config cache-files-dir)"
       
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
@@ -43,16 +44,16 @@ jobs:
 
       - name: Install prerequisites
         run: |
-          wget -O box.phar https://github.com/humbug/box/releases/download/3.13.0/box.phar
+          wget -O box.phar https://github.com/humbug/box/releases/download/4.2.0/box.phar
           echo "BOX_BIN=$(pwd)/box.phar" >> $GITHUB_ENV
           sudo chown -R $(whoami):$(whoami) .
 
       - name: Install dependencies
-        if: startsWith(matrix.php, '8.0')
+        if: startsWith(matrix.php, '8.1')
         run: composer install --prefer-dist --no-interaction --no-progress --ansi
 
       - name: Update dependencies
-        if: "!startsWith(matrix.php, '8.0')"
+        if: "!startsWith(matrix.php, '8.1')"
         run: composer update --no-interaction --no-progress --ansi
 
       - name: Enable code coverage
@@ -75,7 +76,7 @@ jobs:
         run: vendor/bin/phpstan analyse --ansi
 
       - name: Run e2e tests
-        if: startsWith(matrix.php, '8.0')
+        if: startsWith(matrix.php, '8.1')
         run: bin/compile
 
       - name: Upload coverage results to Coveralls
