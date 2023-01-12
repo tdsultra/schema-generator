@@ -62,19 +62,37 @@ final class FilesGenerator
         $generatedFiles = [];
 
         foreach ($classes as $className => $class) {
+            // @COREMOD
+            if(strpos($className, '\\') !== false) {
+                $classNameParts = explode('\\', $className);
+                $cleanClassName = array_pop($classNameParts);
+                $class->setName($cleanClassName);
+                $className = $cleanClassName;
+            }
+
+            // @COREMOD
+            $file = null;
+            if(isset($config['classTemplates'])) {
+                $classTemplatePath = $config['classTemplates'] . '/' . str_replace('\\', '/', $class->namespace) . '/' . $className . '.php';
+                if (file_exists($classTemplatePath) && is_file($classTemplatePath) && is_readable($classTemplatePath) && $fileContent = file_get_contents($classTemplatePath)) {
+                    $file = PhpFile::fromCode($fileContent);
+                    $this->logger->info(sprintf('Using "%s" as base file.', $classTemplatePath));
+                }
+            }
+
             $classDir = $this->namespaceToDir($class->namespace, $config);
-            $this->filesystem->mkdir($classDir);
+            $this->filesystem->mkdir($classDir);            
 
             $path = sprintf('%s%s.php', $classDir, $className);
 
-            $file = null;
-            if (file_exists($path) && is_file($path) && is_readable($path) && $fileContent = file_get_contents($path)) {
-                $choice = $this->io->askQuestion(new ChoiceQuestion(sprintf('File "%s" already exists, keep your changes and update it (use) or overwrite it (overwrite)?', $path), ['use', 'overwrite'], 0));
-                if ('use' === $choice) {
-                    $file = PhpFile::fromCode($fileContent);
-                    $this->logger ? $this->logger->info(sprintf('Using "%s" as base file.', $path)) : null;
-                }
-            }
+            // $file = null;
+            // if (file_exists($path) && is_file($path) && is_readable($path) && $fileContent = file_get_contents($path)) {
+            //     $choice = $this->io->askQuestion(new ChoiceQuestion(sprintf('File "%s" already exists, keep your changes and update it (use) or overwrite it (overwrite)?', $path), ['use', 'overwrite'], 0));
+            //     if ('use' === $choice) {
+            //         $file = PhpFile::fromCode($fileContent);
+            //         $this->logger ? $this->logger->info(sprintf('Using "%s" as base file.', $path)) : null;
+            //     }
+            // }
 
             try {
                 file_put_contents($path, $this->printer->printFile($class->toNetteFile($config, $this->inflector, $file)));

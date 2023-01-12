@@ -32,6 +32,8 @@ abstract class Property
     /** @var mixed */
     public $defaultValue = null;
     public ?Class_ $reference = null;
+    /** @var array<string, string|string[]> */
+    public ?array $ormColumn = null;        // @COREMOD
     public bool $isReadable = true;
     public bool $isReadableLink = true;
     public bool $isWritable = true;
@@ -45,6 +47,7 @@ abstract class Property
     public ?string $inversedBy = null;
     public bool $isId = false;
     public ?string $typeHint = null;
+    public ?string $relationTableName = null;       // @COREMOD
     public bool $isEnum = false;
     public ?string $adderRemoverTypeHint = null;
     /** @var string[] */

@@ -194,7 +194,6 @@ final class SchemaGeneratorConfiguration implements ConfigurationInterface
                     ->arrayPrototype()
                         ->children()
                             ->arrayNode('pk')
-                                ->addDefaultsIfNotSet()
                                 ->info('IDs configuration')
                                 ->children()
                                     ->scalarNode('name')->defaultValue('id')->info('Override: The property name of the ID')->example('id')->end()
@@ -233,6 +232,7 @@ final class SchemaGeneratorConfiguration implements ConfigurationInterface
                                     ->children()
                                         ->booleanNode('exclude')->defaultFalse()->info('Exclude this property, even if "allProperties" is set to true"')->end()
                                         ->scalarNode('range')->defaultNull()->info('The property range')->example('Offer')->end()
+                                        ->scalarNode('relationTableName')->defaultNull()->info('The relation table name')->example('organization_member')->end()
                                         ->enumNode('cardinality')->defaultValue(CardinalitiesExtractor::CARDINALITY_UNKNOWN)->values([
                                             CardinalitiesExtractor::CARDINALITY_0_1,
                                             CardinalitiesExtractor::CARDINALITY_0_N,
@@ -243,6 +243,11 @@ final class SchemaGeneratorConfiguration implements ConfigurationInterface
                                             CardinalitiesExtractor::CARDINALITY_N_N,
                                             CardinalitiesExtractor::CARDINALITY_UNKNOWN,
                                         ])->end()
+                                        ->arrayNode('ormColumn')
+                                            ->info('The doctrine column attribute content')
+                                            ->example('{type: "decimal", precision: 5, scale: 1, options: {comment: "my comment"}}')
+                                            ->variablePrototype()->end()
+                                        ->end()
                                         ->arrayNode('groups')
                                             ->info('Symfony Serialization Groups')
                                             ->scalarPrototype()->end()

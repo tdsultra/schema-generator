@@ -119,6 +119,14 @@ final class ApiPlatformCoreAttributeGenerator extends AbstractAttributeGenerator
     {
         $arguments = [];
 
+        if(!$property->isReadableLink) {
+            $arguments['readableLink'] = false;
+        }
+
+        if(!$property->isWritableLink) {
+            $arguments['writableLink'] = false;
+        }
+
         if ($property->rdfType()) {
             if ($this->config['apiPlatformOldAttributes']) {
                 $arguments['iri'] = $property->rdfType();

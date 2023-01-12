@@ -201,14 +201,14 @@ class TypesGenerator
 
         // @COREMOD
         // Allow ID Generation to be defined per-class and pass through a specific ID config object
-        foreach ($classes as &$class) {
+        foreach ($classes as $class) {
             $idConfig = [];
 
             if($config['id']) {
                 $idConfig = array_merge($idConfig, $config['id']);
             }
 
-            if($config['types'][$class->name()]['pk']) {
+            if(isset($config['types'][$class->name()]['pk'])) {
                 $idConfig = array_merge($idConfig, $config['types'][$class->name()]['pk']);
             }
 

@@ -15,6 +15,7 @@ namespace ApiPlatform\SchemaGenerator\ClassMutator;
 
 use ApiPlatform\SchemaGenerator\Model\Class_;
 use ApiPlatform\SchemaGenerator\PropertyGenerator\IdPropertyGeneratorInterface;
+use ApiPlatform\SchemaGenerator\Schema\Model\Property as SchemaProperty;
 
 final class ClassIdAppender implements ClassMutatorInterface
 {
@@ -44,6 +45,7 @@ final class ClassIdAppender implements ClassMutatorInterface
             return;
         }
 
-        $class->addProperty(($this->idPropertyGenerator)($this->config['id']['generationStrategy'], $this->config['id']['writable']));
+        // @COREMOD
+        $class->addProperty(($this->idPropertyGenerator)($this->config['generationStrategy'], $this->config['writable'], new SchemaProperty($this->config['name'])));
     }
 }

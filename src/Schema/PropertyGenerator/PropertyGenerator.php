@@ -158,10 +158,14 @@ final class PropertyGenerator implements PropertyGeneratorInterface
         $schemaProperty->rangeName = $rangeName;
         $schemaProperty->defaultValue = $propertyConfig['defaultValue'] ?? null;
         $schemaProperty->cardinality = $cardinality;
+        $schemaProperty->ormColumn = $propertyConfig['ormColumn'] ?? null;                      // @COREMOD
         $schemaProperty->isReadable = $propertyConfig['readable'] ?? true;
+        $schemaProperty->isReadableLink = $propertyConfig['readableLink'] ?? true;              // @COREMOD
         $schemaProperty->isWritable = $propertyConfig['writable'] ?? true;
+        $schemaProperty->isWritableLink = $propertyConfig['writableLink'] ?? true;              // @COREMOD
         $schemaProperty->isNullable = $isNullable;
         $schemaProperty->isRequired = $propertyConfig['required'] ?? false;
+        $schemaProperty->relationTableName = $propertyConfig['relationTableName'] ?? null;      // @COREMOD
         $schemaProperty->isUnique = $propertyConfig['unique'] ?? false;
         $schemaProperty->isEmbedded = $propertyConfig['embedded'] ?? false;
         $schemaProperty->mappedBy = $propertyConfig['mappedBy'] ?? null;

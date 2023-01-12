@@ -32,7 +32,8 @@ final class IdPropertyGenerator implements IdPropertyGeneratorInterface
 
     public function __invoke(string $generationStrategy, bool $supportsWritableId, ?Property $property = null): Property
     {
-        $idProperty = ($this->idPropertyGenerator)($generationStrategy, $supportsWritableId, new SchemaProperty('id'));
+        // @COREMOD
+        $idProperty = ($this->idPropertyGenerator)($generationStrategy, $supportsWritableId, $property ?? new SchemaProperty('id'));
 
         if (!$idProperty instanceof SchemaProperty) {
             throw new \LogicException(sprintf('ID property has to be an instance of "%s".', SchemaProperty::class));
