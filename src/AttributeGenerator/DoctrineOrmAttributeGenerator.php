@@ -47,10 +47,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
             return [new Attribute('ORM\Embeddable')];
         }
 
-        // @COREMOD - this may need changing to ensure the rest of the function
-        // has a chance to operate
+        $attributes = [];
+
+        // @COREMOD
         if ($doctrineAttributeList = (isset($this->config['types'][$class->name()]) ? $this->config['types'][$class->name()]['attributes'] : false)) {
-            $attributes = [];
             foreach ($doctrineAttributeList as $doctrineAttribute) {
                 foreach($doctrineAttribute as $attributeName=>$attributeArgs) {
 
@@ -70,10 +70,8 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                     }
                 }
             }
-            return $attributes;
         }
 
-        $attributes = [];
         if ($class->hasChild && ($inheritanceAttributes = $this->config['doctrine']['inheritanceAttributes'])) {
             foreach ($inheritanceAttributes as $configAttributes) {
                 foreach ($configAttributes as $attributeName => $attributeArgs) {
@@ -99,7 +97,8 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
             $attributes[] = new Attribute('ORM\InheritanceType', [\in_array($this->config['doctrine']['inheritanceType'], ['JOINED', 'SINGLE_TABLE', 'TABLE_PER_CLASS', 'NONE'], true) ? $this->config['doctrine']['inheritanceType'] : 'JOINED']);
             $attributes[] = new Attribute('ORM\DiscriminatorColumn', ['name' => 'discr']);
             $attributes[] = new Attribute('ORM\DiscriminatorMap', [array_reduce($mapNames, fn (array $map, string $mapName) => $map + [u($mapName)->camel()->toString() => new Literal(sprintf('%s::class', $mapName))], [])]);
-        } else {
+        } 
+        else {
             $attributes[] = new Attribute('ORM\Entity');
         }
 
