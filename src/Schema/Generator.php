@@ -16,6 +16,7 @@ namespace ApiPlatform\SchemaGenerator\Schema;
 use ApiPlatform\SchemaGenerator\CardinalitiesExtractor;
 use ApiPlatform\SchemaGenerator\FilesGenerator;
 use ApiPlatform\SchemaGenerator\GoodRelationsBridge;
+use ApiPlatform\SchemaGenerator\InflectorProxy;
 use ApiPlatform\SchemaGenerator\PhpTypeConverter;
 use ApiPlatform\SchemaGenerator\Printer;
 use ApiPlatform\SchemaGenerator\TwigBuilder;
@@ -54,7 +55,7 @@ final class Generator
         $goodRelationsBridge = new GoodRelationsBridge($relations);
         $cardinalitiesExtractor = new CardinalitiesExtractor($goodRelationsBridge);
 
-        $inflector = new EnglishInflector();
+        $inflector = new InflectorProxy($configuration['inflector']);
 
         $logger = new ConsoleLogger($output);
 
