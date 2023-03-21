@@ -52,20 +52,19 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
         // @COREMOD
         if ($doctrineAttributeList = (isset($this->config['types'][$class->name()]) ? $this->config['types'][$class->name()]['attributes'] : false)) {
             foreach ($doctrineAttributeList as $doctrineAttribute) {
-                foreach($doctrineAttribute as $attributeName=>$attributeArgs) {
+                foreach ($doctrineAttribute as $attributeName => $attributeArgs) {
 
                     // @COREMOD - support multiple indices through a custom Indexes attribute, note
                     // it's important to prevent these from being merged
-                    if($attributeName == 'Indexes') {
-                        foreach($attributeArgs as $indexDefinition) {
-                            foreach($indexDefinition as $_attributeName => $_attributeArgs) {
+                    if ($attributeName == 'Indexes') {
+                        foreach ($attributeArgs as $indexDefinition) {
+                            foreach ($indexDefinition as $_attributeName => $_attributeArgs) {
                                 $attr = new Attribute($_attributeName, $_attributeArgs);
                                 $attr->mergeable = false;
                                 $attributes[] = $attr;
                             }
                         }
-                    }
-                    else {
+                    } else {
                         $attributes[] = new Attribute($attributeName, $attributeArgs);
                     }
                 }
@@ -91,14 +90,20 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                 $parentNames = array_keys($directChildren);
                 $childNames = array_merge($childNames, array_keys(array_filter($directChildren, fn (Class_ $childClass) => !$childClass->isAbstract)));
             }
-            $mapNames = array_merge([$class->name()], $childNames);
+
+            /**
+             * @COREMOD Removed $mapNames as is no longer used on code below
+             */
+            // $mapNames = array_merge([$class->name()], $childNames);
 
             $attributes[] = new Attribute('ORM\Entity');
-            $attributes[] = new Attribute('ORM\InheritanceType', [\in_array($this->config['doctrine']['inheritanceType'], ['JOINED', 'SINGLE_TABLE', 'TABLE_PER_CLASS', 'NONE'], true) ? $this->config['doctrine']['inheritanceType'] : 'JOINED']);
-            $attributes[] = new Attribute('ORM\DiscriminatorColumn', ['name' => 'discr']);
-            $attributes[] = new Attribute('ORM\DiscriminatorMap', [array_reduce($mapNames, fn (array $map, string $mapName) => $map + [u($mapName)->camel()->toString() => new Literal(sprintf('%s::class', $mapName))], [])]);
-        } 
-        else {
+            /**
+             * @COREMOD Prevents schema-generator from automatically generating inheritance code for single/class table inheritance
+             */
+            // $attributes[] = new Attribute('ORM\InheritanceType', [\in_array($this->config['doctrine']['inheritanceType'], ['JOINED', 'SINGLE_TABLE', 'TABLE_PER_CLASS', 'NONE'], true) ? $this->config['doctrine']['inheritanceType'] : 'JOINED']);
+            // $attributes[] = new Attribute('ORM\DiscriminatorColumn', ['name' => 'discr']);
+            // $attributes[] = new Attribute('ORM\DiscriminatorMap', [array_reduce($mapNames, fn (array $map, string $mapName) => $map + [u($mapName)->camel()->toString() => new Literal(sprintf('%s::class', $mapName))], [])]);
+        } else {
             $attributes[] = new Attribute('ORM\Entity');
         }
 
@@ -133,17 +138,17 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
         }
 
         // @TODO Need to add support for onDelete and cascade operations
-        $ormProperties = isset($property->ormColumn) ? $property->ormColumn: [];
+        $ormProperties = isset($property->ormColumn) ? $property->ormColumn : [];
 
         // move this into relationship def
         $relationProperties = [];
-        if(isset($ormProperties['cascade'])) {
+        if (isset($ormProperties['cascade'])) {
             $relationProperties['cascade'] = $ormProperties['cascade'];
             unset($ormProperties['cascade']);
         }
 
         //Should we limit this by relation type?
-        if(isset($ormProperties['orphanRemoval'])) {
+        if (isset($ormProperties['orphanRemoval'])) {
             $relationProperties['orphanRemoval'] = $ormProperties['orphanRemoval'];
             unset($ormProperties['orphanRemoval']);
         }
@@ -182,10 +187,10 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                         case 'string':
                             $type = 'text';
                             break;
-                        case '\\'.\DateTimeInterface::class:
+                        case '\\' . \DateTimeInterface::class:
                             $type = 'datetime';
                             break;
-                        case '\\'.\DateInterval::class:
+                        case '\\' . \DateInterval::class:
                             $type = 'string';
                             break;
                     }
@@ -235,7 +240,7 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
         }
 
         // remove options if it's been set as not compatible with join columns
-        if(isset($ormProperties['options'])) {
+        if (isset($ormProperties['options'])) {
             unset($ormProperties['options']);
         }
 
@@ -279,12 +284,12 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                 } else {
                     $attributes[] = new Attribute('ORM\ManyToMany', array_merge(['targetEntity' => $relationName], $relationProperties));
                 }
-                if($relationTableName) {
+                if ($relationTableName) {
                     $attributes[] = new Attribute('ORM\JoinTable', ['name' => $relationTableName]);
                 }
                 // Self-referencing relation
                 if ($className === $property->reference->name()) {
-                    $attributes[] = new Attribute('ORM\InverseJoinColumn', ['name' => $this->generateIdentifierName($this->inflector->singularize($property->name())[0].ucfirst($property->reference->name()).'Id', 'inverse_join_column', $this->config), 'unique' => true]);
+                    $attributes[] = new Attribute('ORM\InverseJoinColumn', ['name' => $this->generateIdentifierName($this->inflector->singularize($property->name())[0] . ucfirst($property->reference->name()) . 'Id', 'inverse_join_column', $this->config), 'unique' => true]);
                 } else {
                     $attributes[] = new Attribute('ORM\InverseJoinColumn', ['unique' => true]);
                 }
@@ -295,19 +300,19 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
                 } else {
                     $attributes[] = new Attribute('ORM\ManyToMany', array_merge(['targetEntity' => $relationName], $relationProperties));
                 }
-                if($relationTableName) {
+                if ($relationTableName) {
                     $attributes[] = new Attribute('ORM\JoinTable', ['name' => $relationTableName]);
                 }
                 // Self-referencing relation
                 if ($className === $property->reference->name()) {
-                    $attributes[] = new Attribute('ORM\InverseJoinColumn', ['name' => $this->generateIdentifierName($this->inflector->singularize($property->name())[0].ucfirst($property->reference->name()).'Id', 'inverse_join_column', $this->config), 'nullable' => false, 'unique' => true]);
+                    $attributes[] = new Attribute('ORM\InverseJoinColumn', ['name' => $this->generateIdentifierName($this->inflector->singularize($property->name())[0] . ucfirst($property->reference->name()) . 'Id', 'inverse_join_column', $this->config), 'nullable' => false, 'unique' => true]);
                 } else {
                     $attributes[] = new Attribute('ORM\InverseJoinColumn', ['nullable' => false, 'unique' => true]);
                 }
                 break;
             case CardinalitiesExtractor::CARDINALITY_N_N:
                 $attributes[] = new Attribute('ORM\ManyToMany', ['targetEntity' => $relationName], $relationProperties);
-                if($relationTableName) {
+                if ($relationTableName) {
                     $attributes[] = new Attribute('ORM\JoinTable', ['name' => $relationTableName]);
                 }
                 break;
@@ -338,11 +343,11 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
 
         $idConfig = [];
 
-        if($this->config['id']) {
+        if ($this->config['id']) {
             $idConfig = array_merge($idConfig, $this->config['id']);
         }
 
-        if(isset($this->config['types'][$className]['pk'])) {
+        if (isset($this->config['types'][$className]['pk'])) {
             $idConfig = array_merge($idConfig, $this->config['types'][$className]['pk']);
         }
 
