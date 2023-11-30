@@ -49,6 +49,13 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
 
         $attributes = [];
 
+        // @COREMOD - Checks if this is actually an ElasticSearch model
+        foreach ($this->config['types'][$class->name()]['attributes'] as $key => $attribute) {
+            if (isset($attribute['elasticsearch']) && $attribute['elasticsearch']['enabled']) {
+                return [];
+            }
+        }
+
         // @COREMOD
         if ($doctrineAttributeList = (isset($this->config['types'][$class->name()]) ? $this->config['types'][$class->name()]['attributes'] : false)) {
             foreach ($doctrineAttributeList as $doctrineAttribute) {
