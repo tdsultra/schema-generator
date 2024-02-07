@@ -160,6 +160,11 @@ final class DoctrineOrmAttributeGenerator extends AbstractAttributeGenerator
             unset($ormProperties['orphanRemoval']);
         }
 
+        if (isset($ormProperties['fetch'])) {
+            $relationProperties['fetch'] = $ormProperties['fetch'];
+            unset($ormProperties['fetch']);
+        }
+
         $type = null;
         if ($property->isEnum) {
             $type = $property->isArray() ? 'simple_array' : 'string';
