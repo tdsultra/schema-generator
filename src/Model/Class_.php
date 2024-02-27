@@ -395,6 +395,22 @@ abstract class Class_
             // }
 
             // $class->setMethods($netteMethods);
+
+            // add a default toString to avoid having millions of templates
+            if(!$class->hasMethod('__toString')) {
+                $__toStringBody = '';
+                if(isset($this->properties['id'])) {
+                    $__toStringBody = "return '{$this->name}:' . \$this->id;";
+                }
+                else {
+                    $__toStringBody = "return 'Unknown {$this->name}';";
+                }
+                $method = $class->addMethod('__toString')
+                    ->addComment('Default implementation added by schema-generator')
+                    ->setPublic()
+                    ->setReturnType('string')
+                    ->setBody($__toStringBody);
+            }
         }
 
         return $file;
