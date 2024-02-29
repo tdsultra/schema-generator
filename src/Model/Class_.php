@@ -398,13 +398,7 @@ abstract class Class_
 
             // add a default toString to avoid having millions of templates
             if(!$class->hasMethod('__toString')) {
-                $__toStringBody = '';
-                if(isset($this->properties['id'])) {
-                    $__toStringBody = "return '{$this->name}:' . \$this->id;";
-                }
-                else {
-                    $__toStringBody = "return 'Unknown {$this->name}';";
-                }
+                $__toStringBody = "return (get_parent_class(\$this) && is_callable('parent::__toString')) ? call_user_func(array('parent', '__toString')) : (isset(\$this->id) ? '{$this->name} #'.\$this->id : 'Unknown {$this->name}');";
                 $method = $class->addMethod('__toString')
                     ->addComment('Default implementation added by schema-generator')
                     ->setPublic()
