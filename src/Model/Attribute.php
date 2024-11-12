@@ -22,25 +22,25 @@ final class Attribute
 
     private string $name;
 
-    /** @var (int|bool|null|string|string[]|string[][]|\Nette\PhpGenerator\Literal|\Nette\PhpGenerator\Literal[])[] */
+    /** @var (int|bool|string|string[]|string[][]|\Nette\PhpGenerator\Literal|\Nette\PhpGenerator\Literal[]|null)[] */
     private array $args;
 
     /**
      * If this attribute can be appended if a same one has not previously been generated or if the same one is not mergeable?
      *
-     * @see \ApiPlatform\SchemaGenerator\Model\AddAttributeTrait
+     * @see AddAttributeTrait
      */
     public bool $append = true;
 
     /**
      * If this attribute mergeable with the next one?
      *
-     * @see \ApiPlatform\SchemaGenerator\Model\AddAttributeTrait
+     * @see AddAttributeTrait
      */
     public bool $mergeable = true;
 
     /**
-     * @param (int|bool|null|string|string[]|string[][]|\Nette\PhpGenerator\Literal|\Nette\PhpGenerator\Literal[])[] $args
+     * @param (int|bool|string|string[]|string[][]|\Nette\PhpGenerator\Literal|\Nette\PhpGenerator\Literal[]|null)[] $args
      */
     public function __construct(string $name, array $args = [])
     {
@@ -60,7 +60,7 @@ final class Attribute
     }
 
     /**
-     * @return (int|bool|null|string|string[]|string[][]|\Nette\PhpGenerator\Literal|\Nette\PhpGenerator\Literal[])[]
+     * @return (int|bool|string|string[]|string[][]|\Nette\PhpGenerator\Literal|\Nette\PhpGenerator\Literal[]|null)[]
      */
     public function args(): array
     {

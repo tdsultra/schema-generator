@@ -58,8 +58,8 @@ class TypesGenerator
      * @var string[] the RDF types of classes in the vocabs
      */
     public static array $classTypes = [
-      'rdfs:Class',
-      'owl:Class',
+        'rdfs:Class',
+        'owl:Class',
     ];
 
     /**
@@ -75,8 +75,8 @@ class TypesGenerator
      * @var string[] the RDF types of domains in the vocabs
      */
     public static array $domainProperties = [
-      'schema:domainIncludes',
-      'rdfs:domain',
+        'schema:domainIncludes',
+        'rdfs:domain',
     ];
 
     private PhpTypeConverterInterface $phpTypeConverter;
@@ -390,8 +390,8 @@ class TypesGenerator
 
     /**
      * @param array{resources: RdfResource[], uris: string[], names: string[]}[] $typesResources
-     * @param Configuration                $config
-     * @param array<string, RdfResource[]> $map
+     * @param Configuration                                                      $config
+     * @param array<string, RdfResource[]>                                       $map
      */
     private function addPropertyToMap(RdfResource $property, RdfResource $domain, array $typesResources, array $config, array &$map): void
     {

@@ -204,8 +204,8 @@ final class PropertyGenerator implements PropertyGeneratorInterface
         }
 
         if (
-            (!isset($propertyConfig['range']) || $propertyConfig['range'] === $localName) &&
-            (empty($config['types']) || isset($config['types'][$localName]) || $dataType)
+            (!isset($propertyConfig['range']) || $propertyConfig['range'] === $localName)
+            && (empty($config['types']) || isset($config['types'][$localName]) || $dataType)
         ) {
             return [$range];
         }

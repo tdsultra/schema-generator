@@ -47,7 +47,7 @@ abstract class Class_
     public bool $isAbstract = false;
     public bool $hasChild = false;
     public bool $isEmbeddable = false;
-    /** @var array<string, ?array<string, string|int|bool|string[]|null>> */
+    /** @var array<string|int, ?array<string, string|int|bool|string[]|null>> */
     public array $operations = [];
 
     /**
@@ -114,7 +114,7 @@ abstract class Class_
         return $this->interface ? $this->interface->namespace() : null;
     }
 
-    public function interfaceToNetteFile(string $fileHeader = null): PhpFile
+    public function interfaceToNetteFile(?string $fileHeader = null): PhpFile
     {
         if (!$this->interface) {
             throw new \LogicException(sprintf("'%s' has no interface attached.", $this->name));
